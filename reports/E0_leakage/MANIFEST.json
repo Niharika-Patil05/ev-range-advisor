@@ -1,0 +1,26 @@
+{
+  "experiment": "E0_leakage",
+  "description": "Random-row splitting vs route-wise splitting on identical real data",
+  "timestamp_utc": "2026-09-20T19:28:15+00:00",
+  "git_revision": "daf700b-dirty",
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "n_rows_per_seed": 12,
+  "provenance": "REAL",
+  "conclusion_type": "DEMONSTRATED",
+  "split_protocol": "L0 random rows vs L1 unseen routes, 5 folds, 5 seeds",
+  "n": "480 segments, 134 routes",
+  "python": "3.14.4",
+  "numpy": "2.5.3",
+  "pandas": "3.0.6",
+  "config": {
+    "eps_m": 500.0,
+    "folds": 5
+  },
+  "data_files": {}
+}

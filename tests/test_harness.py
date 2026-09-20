@@ -79,3 +79,26 @@ def test_summarise_across_seeds_groups_by_index():
 
 def test_git_revision_is_reported():
     assert "UNKNOWN" not in git_revision()
+
+
+def test_descriptive_string_columns_do_not_break_the_summary():
+    """An experiment may carry a protocol label alongside its metrics."""
+    def with_label(seed: int) -> pd.DataFrame:
+        d = fake_experiment(seed)
+        d["protocol"] = "L1"
+        return d
+
+    res = run_experiment("E_lbl", "smoke", with_label, evidence(), tmp := __import__("pathlib").Path(
+        __import__("tempfile").mkdtemp()), seeds=(0, 1), verbose=False)
+    assert "MAPE_mean" in res["summary"].columns
+    assert "protocol_mean" not in res["summary"].columns
+
+
+def test_summary_requires_at_least_one_numeric_metric():
+    def no_metrics(seed: int) -> pd.DataFrame:
+        return pd.DataFrame({"model": ["a"], "note": ["x"]})
+
+    with pytest.raises(ValueError, match="No numeric metric columns"):
+        run_experiment("E_bad2", "smoke", no_metrics, evidence(),
+                       __import__("pathlib").Path(__import__("tempfile").mkdtemp()),
+                       seeds=(0,), verbose=False)

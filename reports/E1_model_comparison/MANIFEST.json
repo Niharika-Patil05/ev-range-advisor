@@ -1,0 +1,27 @@
+{
+  "experiment": "E1_model_comparison",
+  "description": "Six models under route-wise splitting on real VED segments",
+  "timestamp_utc": "2026-09-20T19:31:37+00:00",
+  "git_revision": "daf700b-dirty",
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "n_rows_per_seed": 6,
+  "provenance": "REAL",
+  "conclusion_type": "DEMONSTRATED",
+  "split_protocol": "L1 route-wise, 5 folds x 5 seeds, groups disjoint (asserted)",
+  "n": "480 segments, 134 routes, 3 vehicles (only 2 contribute meaningfully)",
+  "python": "3.14.4",
+  "numpy": "2.5.3",
+  "pandas": "3.0.6",
+  "config": {
+    "eps_m": 500.0,
+    "folds": 5,
+    "protocol": "L1"
+  },
+  "data_files": {}
+}

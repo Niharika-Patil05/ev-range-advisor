@@ -63,8 +63,21 @@ def file_sha256(path: str | Path, chunk: int = 1 << 20) -> str:
 
 
 def summarise_across_seeds(per_seed: pd.DataFrame, index_cols: list[str]) -> pd.DataFrame:
-    """Aggregate per-seed metrics to mean and std. A single seed proves nothing."""
-    metrics = [c for c in per_seed.columns if c not in index_cols + ["seed"]]
+    """Aggregate per-seed metrics to mean and std. A single seed proves nothing.
+
+    Only NUMERIC columns are aggregated. An experiment may legitimately carry
+    descriptive string columns (a protocol label, a variant name) that are not part
+    of the index; averaging those is meaningless, so they are dropped from the
+    summary rather than raising.
+    """
+    metrics = [c for c in per_seed.columns
+               if c not in index_cols + ["seed"]
+               and pd.api.types.is_numeric_dtype(per_seed[c])]
+    if not metrics:
+        raise ValueError(
+            f"No numeric metric columns to summarise. Columns: {list(per_seed.columns)}; "
+            f"index_cols={index_cols}."
+        )
     grouped = per_seed.groupby(index_cols)[metrics]
     out = grouped.agg(["mean", "std", "count"])
     out.columns = [f"{m}_{stat}" for m, stat in out.columns]
