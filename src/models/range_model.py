@@ -11,7 +11,7 @@ from sklearn.linear_model import LinearRegression
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 
-from ..config import DEFAULT_VEHICLE
+from ..config import VehicleSpec
 from ..features.trip_features import ALL_FEATURES, ML_ONLY_FEATURES
 
 
@@ -77,7 +77,7 @@ class HybridResidual:
         return X["phys_wh_km"].to_numpy() * np.exp(self.est.predict(X[self.features]))
 
 
-def model_factories(seed: int = 0, vehicle=DEFAULT_VEHICLE) -> dict:
+def model_factories(vehicle: VehicleSpec, seed: int = 0) -> dict:
     """name -> zero-argument constructor. Pure-ML baselines deliberately do NOT see phys_wh_km."""
     return {
         "rated_range": lambda: ConstantRated(vehicle.rated_wh_per_km),

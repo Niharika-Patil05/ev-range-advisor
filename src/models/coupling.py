@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from ..config import DEFAULT_VEHICLE, VehicleSpec
+from ..config import VehicleSpec
 
 
 def temp_derate(temp_c: float) -> float:
@@ -12,7 +12,7 @@ def temp_derate(temp_c: float) -> float:
     return float(max(0.6, 1.0 - 0.006 * max(0.0, 20.0 - temp_c)))
 
 
-def usable_energy_wh(soc_pct, soh, temp_c, vehicle: VehicleSpec = DEFAULT_VEHICLE):
+def usable_energy_wh(soc_pct, soh, temp_c, vehicle: VehicleSpec):
     """Usable energy = nominal * SoH * temperature derating * SoC."""
     derate = np.vectorize(temp_derate)(temp_c)
     return vehicle.nominal_energy_wh * np.asarray(soh) * derate * np.asarray(soc_pct) / 100.0

@@ -4,7 +4,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from ..config import DEFAULT_VEHICLE, VehicleSpec
+from ..config import VehicleSpec
 from ..physics.road_load import segment_energy_wh
 
 FEATURE_GROUPS = {
@@ -26,7 +26,7 @@ DEFAULT_CONDITIONS = dict(
 )
 
 
-def summarize_trip(segments: pd.DataFrame, cond: dict, vehicle: VehicleSpec = DEFAULT_VEHICLE) -> dict:
+def summarize_trip(segments: pd.DataFrame, cond: dict, vehicle: VehicleSpec) -> dict:
     """Collapse a segment table + conditions into one feature row (incl. the physics baseline)."""
     c = {**DEFAULT_CONDITIONS, **cond}
     L = segments["length_m"].to_numpy(float)

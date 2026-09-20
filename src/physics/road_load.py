@@ -17,7 +17,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from ..config import DEFAULT_VEHICLE, VehicleSpec
+from ..config import VehicleSpec
 
 G0 = 9.81  # m/s^2
 
@@ -34,7 +34,7 @@ def segment_energy_wh(
     stops,
     *,
     mass_kg: float,
-    vehicle: VehicleSpec = DEFAULT_VEHICLE,
+    vehicle: VehicleSpec,
     temp_c: float = 25.0,
     headwind_ms: float = 0.0,
     crr_scale: float = 1.0,

@@ -18,7 +18,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from ..config import CACHE_DIR, DEFAULT_VEHICLE, VehicleSpec
+from ..config import CACHE_DIR, VehicleSpec
 
 OSRM_URL = "https://router.project-osrm.org/route/v1/driving"
 ELEV_URL = "https://api.open-meteo.com/v1/elevation"
@@ -73,7 +73,7 @@ def grades_from_elevation(dist_m, elev_m, smooth: int = 3, max_grade: float = 0.
 
 
 def build_segments(dist_m, elev_m, avg_speed_ms: float, stops_per_km: float,
-                   vehicle: VehicleSpec = DEFAULT_VEHICLE) -> pd.DataFrame:
+                   vehicle: VehicleSpec) -> pd.DataFrame:
     dist_m = np.asarray(dist_m, float)
     length = np.diff(dist_m)
     return pd.DataFrame(dict(
@@ -136,7 +136,7 @@ def fetch_weather(lat: float, lon: float) -> dict:
                 wind_speed_ms=cur["wind_speed_10m"], wind_from_deg=cur["wind_direction_10m"])
 
 
-def plan_route(origin, dest, stops_per_km: float = 1.0, vehicle: VehicleSpec = DEFAULT_VEHICLE):
+def plan_route(origin, dest, vehicle: VehicleSpec, stops_per_km: float = 1.0):
     """Full online pipeline. Returns (segments, weather_dict_with_headwind, meta)."""
     route = fetch_osrm_route(origin, dest)
     lat, lon, dist = resample_polyline(route["lats"], route["lons"])
@@ -159,8 +159,8 @@ PRESET_ROUTES = {
 }
 
 
-def load_preset(name: str) -> pd.DataFrame:
+def load_preset(name: str, vehicle: VehicleSpec) -> pd.DataFrame:
     from ..data.synthetic import make_route
 
     rtype, dist, seed = PRESET_ROUTES[name]
-    return make_route(np.random.default_rng(seed), rtype, dist)
+    return make_route(np.random.default_rng(seed), vehicle, rtype, dist)

@@ -9,7 +9,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from ..config import DEFAULT_SEED, DEFAULT_VEHICLE, VehicleSpec
+from ..config import DEFAULT_SEED, VehicleSpec
 from ..features.trip_features import summarize_trip
 from ..physics.road_load import segment_energy_wh
 
@@ -21,8 +21,8 @@ ROUTE_TYPES = {
 STYLE_SPEED_SCALE = {0: 0.93, 1: 1.00, 2: 1.10}  # eco / normal / sporty
 
 
-def make_route(rng: np.random.Generator, route_type: str = "city", distance_km: float | None = None,
-               vehicle: VehicleSpec = DEFAULT_VEHICLE) -> pd.DataFrame:
+def make_route(rng: np.random.Generator, vehicle: VehicleSpec, route_type: str = "city",
+               distance_km: float | None = None) -> pd.DataFrame:
     """Random segment table (length_m, grade, speed_ms, stops) for one route."""
     cfg = ROUTE_TYPES[route_type]
     distance_km = distance_km if distance_km is not None else rng.uniform(*cfg["dist"])
@@ -76,15 +76,15 @@ def _true_wh_per_km(seg: pd.DataFrame, cond: dict, rng: np.random.Generator,
     return float(wh / (L.sum() / 1000.0) * battery_losses * rng.lognormal(0, 0.03))
 
 
-def generate_trip_dataset(n_routes: int = 60, trips_per_route: int = 20, seed: int = DEFAULT_SEED,
-                          vehicle: VehicleSpec = DEFAULT_VEHICLE) -> pd.DataFrame:
+def generate_trip_dataset(vehicle: VehicleSpec, n_routes: int = 60, trips_per_route: int = 20,
+                          seed: int = DEFAULT_SEED) -> pd.DataFrame:
     """One row per trip: features + `wh_per_km` (target). `route_id` is the grouping key for splits."""
     rng = np.random.default_rng(seed)
     types = list(ROUTE_TYPES)
     rows = []
     for r in range(n_routes):
         rtype = types[r % len(types)]
-        seg = make_route(rng, rtype, vehicle=vehicle)
+        seg = make_route(rng, vehicle, rtype)
         for t in range(trips_per_route):
             cond = sample_conditions(rng)
             row = summarize_trip(seg, cond, vehicle)

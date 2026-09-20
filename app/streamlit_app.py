@@ -9,7 +9,7 @@ import pandas as pd
 import streamlit as st
 
 from src.advisor.advisor import Advisor
-from src.config import DEFAULT_VEHICLE
+from src.config import E_SCOOTER_PLACEHOLDER, NISSAN_LEAF_2013
 from src.features.route_pipeline import PRESET_ROUTES, RoutePlanningError, load_preset, plan_route
 from src.models.coupling import project_soh
 from src.models.soh_model import SOH_FEATURES
@@ -18,16 +18,29 @@ from src.pipeline import load_or_train_system
 st.set_page_config(page_title="EV Range & Battery Advisor", page_icon="🔋", layout="wide")
 
 
+# The vehicle is chosen first and passed explicitly everywhere (Phase 0, item C1).
+# Nothing falls back to a module-level default, so the app can never silently
+# serve a model fitted to a different vehicle's road-load parameters.
+VEHICLES = {
+    "2013 Nissan Leaf (primary research vehicle)": NISSAN_LEAF_2013,
+    "Generic e-scooter (demo only)": E_SCOOTER_PLACEHOLDER,
+}
+
+
 @st.cache_resource(show_spinner="Loading models (the first run trains them on synthetic data)...")
-def get_system():
-    return load_or_train_system()
+def get_system(_vehicle):
+    return load_or_train_system(_vehicle)
 
 
-system = get_system()
-advisor = Advisor(system)
+with st.sidebar:
+    st.header("Vehicle")
+    vehicle = VEHICLES[st.selectbox("Vehicle", list(VEHICLES))]
+
+system = get_system(vehicle)
+advisor = Advisor(system, vehicle)
 
 st.title("🔋 Route-aware EV Range & Battery Health Advisor")
-st.caption(f"Vehicle: {DEFAULT_VEHICLE.name}  |  Model data: {system['meta']['data']}")
+st.caption(f"Vehicle: {vehicle.name}  |  Model data: {system['meta']['data']}")
 if system["meta"]["data"] == "SYNTHETIC":
     st.warning("Models are currently trained on SYNTHETIC data. Numbers demonstrate the workflow, "
                "not real-world accuracy. Replace with real data (see README).")
@@ -39,7 +52,7 @@ with st.sidebar:
     segments, weather, elevation_profile = None, {}, None
     if source.startswith("Demo"):
         name = st.selectbox("Route", list(PRESET_ROUTES))
-        segments = load_preset(name)
+        segments = load_preset(name, vehicle)
     else:
         o = st.text_input("Origin lat, lon", "16.8524, 74.5815")
         d = st.text_input("Destination lat, lon", "16.7050, 74.2433")
@@ -49,7 +62,8 @@ with st.sidebar:
             try:
                 origin = tuple(float(x) for x in o.split(","))
                 dest = tuple(float(x) for x in d.split(","))
-                seg, wx, meta = plan_route(origin, dest, {"light": 0.3, "moderate": 1.0, "heavy": 2.5}[traffic])
+                seg, wx, meta = plan_route(origin, dest, vehicle,
+                                           {"light": 0.3, "moderate": 1.0, "heavy": 2.5}[traffic])
                 st.session_state["planned"] = (seg, wx if use_weather else {})
             except (RoutePlanningError, ValueError) as exc:
                 st.error(f"Could not plan route: {exc}. Use a demo route instead.")
@@ -103,8 +117,8 @@ with tab_trip:
         with st.expander("Model details"):
             st.write(f"Predicted consumption: **{p['wh_per_km']:.1f} Wh/km** "
                      f"(physics-only baseline: {p['phys_wh_km']:.1f} Wh/km, "
-                     f"rated: {DEFAULT_VEHICLE.rated_wh_per_km:.1f} Wh/km).")
-            st.write(f"Usable energy now: {p['usable_wh']:.0f} Wh of {DEFAULT_VEHICLE.nominal_energy_wh:.0f} Wh nominal.")
+                     f"rated: {vehicle.rated_wh_per_km:.1f} Wh/km).")
+            st.write(f"Usable energy now: {p['usable_wh']:.0f} Wh of {vehicle.nominal_energy_wh:.0f} Wh nominal.")
 
 # ------------------------------------------------------------------ battery tab
 with tab_battery:

@@ -4,7 +4,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from ..config import DEFAULT_VEHICLE, VehicleSpec
+from ..config import VehicleSpec
 from ..features.trip_features import DEFAULT_CONDITIONS, summarize_trip
 from ..models.coupling import project_soh, temp_derate, usable_energy_wh
 
@@ -12,7 +12,7 @@ from ..models.coupling import project_soh, temp_derate, usable_energy_wh
 class Advisor:
     """`system` is the dict produced by src.pipeline.train_all()['system']."""
 
-    def __init__(self, system: dict, vehicle: VehicleSpec = DEFAULT_VEHICLE):
+    def __init__(self, system: dict, vehicle: VehicleSpec):
         self.hybrid = system["hybrid"]
         self.conformal = system["conformal"]
         self.vehicle = vehicle

@@ -3,10 +3,10 @@ from dataclasses import replace
 import numpy as np
 import pytest
 
-from src.config import DEFAULT_VEHICLE
+from src.config import E_SCOOTER_PLACEHOLDER
 from src.physics.road_load import G0, air_density, segment_energy_wh
 
-V = DEFAULT_VEHICLE
+V = E_SCOOTER_PLACEHOLDER
 
 
 def one(grade=0.0, speed=10.0, stops=0.0, mass=170.0, vehicle=V, **kw):

@@ -2,14 +2,17 @@ import numpy as np
 import pytest
 
 from src.advisor.advisor import Advisor
+from src.config import E_SCOOTER_PLACEHOLDER
 from src.features.route_pipeline import PRESET_ROUTES, load_preset
 from src.pipeline import train_all
+
+VEHICLE = E_SCOOTER_PLACEHOLDER
 
 
 @pytest.fixture(scope="module")
 def results(tmp_path_factory):
     tmp = tmp_path_factory.mktemp("out")
-    return train_all(n_routes=30, trips_per_route=10, save=True, models_dir=tmp / "m",
+    return train_all(VEHICLE, n_routes=30, trips_per_route=10, save=True, models_dir=tmp / "m",
                      reports_dir=tmp / "r", make_plots=True, cv_folds=3, verbose=False)
 
 
@@ -28,8 +31,8 @@ def test_soh_lobo_mae_small(results):
 
 
 def test_advisor_physical_sanity(results):
-    adv = Advisor(results["system"])
-    seg = load_preset(list(PRESET_ROUTES)[1])
+    adv = Advisor(results["system"], VEHICLE)
+    seg = load_preset(list(PRESET_ROUTES)[1], VEHICLE)
     base = dict(soc_start=90, soh=0.9, load_kg=80, style=1, aux_on=0, temp_c=30, headwind_ms=0, rain=0)
     r0 = adv.predict(seg, base)["range_km"]
     assert adv.predict(seg, {**base, "headwind_ms": 6})["range_km"] < r0       # headwind hurts

@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 from sklearn.model_selection import GroupKFold, GroupShuffleSplit
 
-from .config import DEFAULT_SEED, DEFAULT_VEHICLE, MODELS_DIR, REPORTS_DIR
+from .config import DEFAULT_SEED, MODELS_DIR, REPORTS_DIR, VehicleSpec
 from .data.synthetic import generate_battery_cycles, generate_trip_dataset
 from .features.trip_features import ALL_FEATURES, FEATURE_GROUPS, TARGET
 from .models.coupling import usable_energy_wh
@@ -29,11 +29,18 @@ def regression_metrics(y, yhat) -> dict:
                 MAPE=float(np.mean(np.abs(y - yhat) / y) * 100))
 
 
-def range_mape(df: pd.DataFrame, yhat) -> float:
-    """MAPE of the *range* implied by the predicted consumption (same usable energy for both)."""
-    usable = usable_energy_wh(df["soc_start"], df["soh"], df["temp_c"])
+def range_km_error(df: pd.DataFrame, yhat, vehicle: VehicleSpec) -> float:
+    """Mean absolute error of the predicted RANGE, in kilometres.
+
+    Replaces the former `range_mape`, which was redundant: with the same usable
+    energy U on both sides, |U/yhat - U/y| / (U/y) simplifies exactly to
+    |y - yhat| / yhat, i.e. it was MAPE with a different denominator and told us
+    nothing about the battery side. Kilometres do not cancel, and km is what a
+    rider actually experiences.
+    """
+    usable = usable_energy_wh(df["soc_start"], df["soh"], df["temp_c"], vehicle)
     r_true, r_pred = usable / df[TARGET].to_numpy(), usable / np.asarray(yhat)
-    return float(np.mean(np.abs(r_pred - r_true) / r_true) * 100)
+    return float(np.mean(np.abs(r_pred - r_true)))
 
 
 def cross_val_mape(factory, df: pd.DataFrame, n_splits: int = 5) -> tuple[float, float]:
@@ -45,7 +52,7 @@ def cross_val_mape(factory, df: pd.DataFrame, n_splits: int = 5) -> tuple[float,
     return float(np.mean(scores)), float(np.std(scores))
 
 
-def ablation_table(dev: pd.DataFrame, seed: int, folds: int) -> pd.DataFrame:
+def ablation_table(dev: pd.DataFrame, vehicle: VehicleSpec, seed: int, folds: int) -> pd.DataFrame:
     """Drop one ML feature group at a time. NOTE: for the hybrid, the physics baseline still uses the
     route/weather/state inputs internally; only the ML layer loses them."""
     variants = [("full", []), ("without route features", ["route"]),
@@ -58,18 +65,19 @@ def ablation_table(dev: pd.DataFrame, seed: int, folds: int) -> pd.DataFrame:
         hyb_m, _ = cross_val_mape(lambda: HybridResidual(feats, seed=seed), dev, folds)
         rows.append(dict(variant=label, gbm_CV_MAPE=gbm_m, hybrid_CV_MAPE=hyb_m))
     rows.append(dict(variant="physics baseline only (no ML)",
-                     gbm_CV_MAPE=np.nan, hybrid_CV_MAPE=cross_val_mape(model_factories(seed)["physics_only"], dev, folds)[0]))
+                     gbm_CV_MAPE=np.nan,
+                     hybrid_CV_MAPE=cross_val_mape(model_factories(vehicle, seed)["physics_only"], dev, folds)[0]))
     return pd.DataFrame(rows)
 
 
 # ----------------------------------------------------------------------------- main entry
-def train_all(n_routes: int = 60, trips_per_route: int = 20, seed: int = DEFAULT_SEED,
+def train_all(vehicle: VehicleSpec, n_routes: int = 60, trips_per_route: int = 20, seed: int = DEFAULT_SEED,
               save: bool = True, models_dir: Path = MODELS_DIR, reports_dir: Path = REPORTS_DIR,
               make_plots: bool = True, cv_folds: int = 5, alpha: float = 0.1, verbose: bool = True) -> dict:
     log = print if verbose else (lambda *a, **k: None)
 
     # ---- data + route-wise splits (train / calibration / test never share a route)
-    df = generate_trip_dataset(n_routes, trips_per_route, seed)
+    df = generate_trip_dataset(vehicle, n_routes, trips_per_route, seed)
     dev_i, test_i = next(GroupShuffleSplit(1, test_size=0.25, random_state=seed).split(df, groups=df["route_id"]))
     dev, test = df.iloc[dev_i].reset_index(drop=True), df.iloc[test_i].reset_index(drop=True)
     tr_i, cal_i = next(GroupShuffleSplit(1, test_size=0.25, random_state=seed).split(dev, groups=dev["route_id"]))
@@ -79,13 +87,14 @@ def train_all(n_routes: int = 60, trips_per_route: int = 20, seed: int = DEFAULT
 
     # ---- range models
     fitted, rows, preds = {}, [], {}
-    for name, factory in model_factories(seed).items():
+    for name, factory in model_factories(vehicle, seed).items():
         m = factory().fit(train, train[TARGET])
         p = m.predict(test)
         fitted[name], preds[name] = m, p
         met = regression_metrics(test[TARGET], p)
         cv_mean, cv_std = cross_val_mape(factory, dev, cv_folds)
-        rows.append(dict(model=name, **met, range_MAPE=range_mape(test, p), CV_MAPE=cv_mean, CV_MAPE_std=cv_std))
+        rows.append(dict(model=name, **met, range_km_MAE=range_km_error(test, p, vehicle),
+                         CV_MAPE=cv_mean, CV_MAPE_std=cv_std))
     range_results = pd.DataFrame(rows).set_index("model")
     log("\nRange models (holdout = unseen routes; MAE/RMSE in Wh/km, MAPE in %):")
     log(range_results.round(2).to_string())
@@ -107,7 +116,7 @@ def train_all(n_routes: int = 60, trips_per_route: int = 20, seed: int = DEFAULT
     log(uncertainty.round(3).to_string())
 
     # ---- ablation
-    ablation = ablation_table(dev, seed, cv_folds)
+    ablation = ablation_table(dev, vehicle, seed, cv_folds)
     log("\nAblation (group-CV MAPE %, lower is better):")
     log(ablation.round(2).to_string(index=False))
 
@@ -119,7 +128,8 @@ def train_all(n_routes: int = 60, trips_per_route: int = 20, seed: int = DEFAULT
     soh_model = fit_final(cycles, seed)
 
     system = dict(hybrid=hybrid, conformal=conf, soh_model=soh_model,
-                  meta=dict(seed=seed, data="SYNTHETIC", vehicle=DEFAULT_VEHICLE.name))
+                  meta=dict(seed=seed, data="SYNTHETIC", vehicle=vehicle.name),
+                  vehicle=vehicle)
     results = dict(range_results=range_results, uncertainty=uncertainty, ablation=ablation,
                    soh=soh_summary, soh_oof=soh_oof, test=test, preds=preds, system=system,
                    conformal_q=conf.q_)
@@ -135,6 +145,7 @@ def train_all(n_routes: int = 60, trips_per_route: int = 20, seed: int = DEFAULT
         soh_summary.to_csv(reports_dir / "soh_results.csv")
         (reports_dir / "summary.json").write_text(json.dumps(dict(
             data="SYNTHETIC - proves the pipeline works, not real-world accuracy",
+            vehicle=vehicle.name,
             best_range_model=str(range_results["MAPE"].idxmin()),
             hybrid_MAPE=float(range_results.loc["hybrid_physics_ml", "MAPE"]),
             conformal_coverage=float(uncertainty.loc["split conformal", "coverage"]),
@@ -147,8 +158,16 @@ def train_all(n_routes: int = 60, trips_per_route: int = 20, seed: int = DEFAULT
     return results
 
 
-def load_or_train_system(models_dir: Path = MODELS_DIR) -> dict:
+def load_or_train_system(vehicle: VehicleSpec, models_dir: Path = MODELS_DIR) -> dict:
+    """Load the saved artefacts, or train a small system if none exist.
+
+    A cached system is only reused if it was trained for THIS vehicle -- otherwise
+    the app would silently serve a model fitted to a different set of road-load
+    parameters, which is precisely the failure the C1 refactor exists to prevent.
+    """
     path = Path(models_dir) / "system.joblib"
     if path.exists():
-        return joblib.load(path)
-    return train_all(n_routes=45, trips_per_route=15, make_plots=False, verbose=False)["system"]
+        system = joblib.load(path)
+        if system.get("meta", {}).get("vehicle") == vehicle.name:
+            return system
+    return train_all(vehicle, n_routes=45, trips_per_route=15, make_plots=False, verbose=False)["system"]

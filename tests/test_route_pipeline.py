@@ -1,6 +1,7 @@
 import numpy as np
 import pytest
 
+from src.config import E_SCOOTER_PLACEHOLDER
 from src.features.route_pipeline import (bearing_deg, build_segments, grades_from_elevation,
                                          haversine_m, headwind_component, resample_polyline)
 
@@ -32,5 +33,6 @@ def test_headwind_geometry():
 
 def test_build_segments_speed_capped():
     dist = np.arange(0, 3001, 300.0)
-    seg = build_segments(dist, np.zeros_like(dist), avg_speed_ms=40.0, stops_per_km=1.0)
+    seg = build_segments(dist, np.zeros_like(dist), avg_speed_ms=40.0, stops_per_km=1.0,
+                         vehicle=E_SCOOTER_PLACEHOLDER)
     assert seg["speed_ms"].max() <= 15.0 and len(seg) == 10
