@@ -1,0 +1,171 @@
+# Dataset manifest -- the single record of what data this project uses.
+#
+# Every entry states where the data came from, under what licence, what it is used
+# for, and what is known to be wrong with it. `sha256` is filled in by
+# scripts/fetch_data.py at download time so any result can name the exact bytes it
+# was computed from.
+#
+# Verified in Phase 0; see docs/PHASE0_VERIFICATION.md for the evidence behind
+# every "verified" claim below.
+
+version: 1
+verified_on: 2026-09-20
+
+datasets:
+
+  ved:
+    name: Vehicle Energy Dataset (VED)
+    role: PRIMARY -- real consumption data for the 2013 Nissan Leaf
+    provenance: REAL
+    url: https://github.com/gsoh/VED
+    download: git clone https://github.com/gsoh/VED.git
+    licence: Apache-2.0
+    citation: >
+      G. Oh, D. J. LeBlanc, H. Peng, "Vehicle Energy Dataset (VED), A Large-Scale
+      Dataset for Vehicle Energy Consumption Research," IEEE Transactions on
+      Intelligent Transportation Systems, vol. 23, no. 4, pp. 3302-3312, 2022.
+    doi: 10.1109/TITS.2020.3035596
+    sha256: PENDING_DOWNLOAD
+    contents:
+      vehicles: 383 total; 3 pure BEV (2013 Nissan Leaf, 24 kWh), 24 PHEV, rest ICE/HEV
+      period: 2017-11-01 to 2018-11-01
+      location: Ann Arbor, Michigan, USA
+    signals:
+      hv_battery_current_a: {rate_s: 1, ev_availability: "100%"}
+      hv_battery_voltage_v: {rate_s: 5, ev_availability: "100%"}
+      hv_battery_soc_pct: {rate_s: 60, ev_availability: "100%"}
+      vehicle_speed_kmh: {rate_s: 1}
+      gps_lat_lon: {rate_s: 3, note: "privacy-fogged at trip start and end"}
+      outside_air_temperature_c: {ev_availability: "100%", note: "MEASURED temperature -- preferred over reanalysis"}
+      ac_power_and_heater_power: {rate_s: 60, note: "measured auxiliary load; verify per-vehicle at load time"}
+      engine_rpm: {ev_availability: "0%", phev_availability: "100%", note: "used to identify PHEV electric-mode segments"}
+      fuel_rate: {ev_availability: "0%", phev_availability: "50%", note: "NOT usable as the electric-mode filter"}
+    known_limitations:
+      - "Only 3 BEVs, one model year, one city (limitation L1)."
+      - "GPS fogged at both ends -- unit of analysis is the ANALYSIS SEGMENT, not the trip (L2)."
+      - "Geo-fenced to Ann Arbor: low road-grade variance, so the grade term is weakly excited (L3)."
+      - "Multi-rate signals: voltage at 5 s must be resampled onto the 1 s current grid (L4)."
+      - "Static-file mass is generalised, and payload/occupancy is unobserved (L5)."
+      - "DayNum does not state local time vs UTC -- resolved empirically by Gate G1."
+
+  eved:
+    name: Extended Vehicle Energy Dataset (eVED)
+    role: PRIMARY -- map-matched GPS, road elevation and speed limits for VED
+    provenance: REAL (external map data)
+    url: https://github.com/zhangsl2013/eVED
+    download: git clone https://Datarepo@bitbucket.org/datarepo/eved-dataset.git
+    licence: Apache-2.0
+    citation: >
+      S. Zhang et al., "Extended vehicle energy dataset (eVED): an enhanced
+      large-scale dataset for deep learning on vehicle trip energy consumption,"
+      arXiv:2203.08630, 2022.
+    sha256: PENDING_DOWNLOAD
+    join:
+      keys: [VehId, Trip, DayNum, Timestamp]
+      type: exact record-level join to VED
+      verified: true
+    contents:
+      road_elevation_records: 12609170
+      speed_limit_records: 12203044
+      method: HMM map-matching via the Valhalla routing engine; OSM/Overpass/QGIS attributes
+    known_limitations:
+      - "Map-matching accuracy and elevation vertical accuracy are NOT published by the authors."
+      - "Phase 1 must measure a proxy: eVED elevation vs Open-Meteo elevation, reported as an uncertainty band."
+      - "The widely-cited URL github.com/zhangs12013/eVED is dead (404); the correct path is zhangsl2013."
+
+  open_meteo_archive:
+    name: Open-Meteo Historical Weather API (ECMWF IFS / ERA5 reanalysis)
+    role: SUPPORTING -- wind and precipitation only (temperature comes from the vehicle)
+    provenance: REAL (reanalysis model output)
+    url: https://archive-api.open-meteo.com/v1/archive
+    api_key_required: false
+    licence: CC-BY 4.0 (attribution required in the report)
+    citation: >
+      Open-Meteo Historical Weather API, based on ECMWF IFS and ERA5 reanalysis.
+      Underlying reanalysis: H. Hersbach et al., "The ERA5 global reanalysis,"
+      Quarterly Journal of the Royal Meteorological Society, vol. 146, 2020.
+    variables: [temperature_2m, wind_speed_10m, wind_direction_10m, precipitation]
+    resolution:
+      ecmwf_ifs: 9 km, 2017-present (covers the VED period)
+      era5: 0.25 deg (~25 km), 1940-present
+    conventions:
+      timezone: request with timezone=GMT and convert explicitly in our own code
+      caching: all responses cached on disk; re-runs require no network
+    known_limitations:
+      - "Grid-cell area average, not a roadside measurement (L6): headwind is a LOW-CONFIDENCE feature."
+      - "'Weather as it turned out', not the forecast available at departure (L7)."
+      - "Rate limits are not published -- cache aggressively (risk K11)."
+    role_note: >
+      Reanalysis temperature is used ONLY to validate the join against the onboard
+      air-temperature sensor (Gate G1). The model's temperature feature is the
+      measured onboard value.
+
+  nasa_pcoe:
+    name: NASA PCoE Li-ion Battery Ageing Dataset
+    role: PRIMARY -- battery State-of-Health estimation (experiment E5)
+    provenance: REAL
+    url: https://www.nasa.gov/intelligent-systems-division/discovery-and-systems-health/pcoe/pcoe-data-set-repository/
+    licence: US Government public domain (confirm at download)
+    citation: >
+      B. Saha and K. Goebel, "Battery Data Set," NASA Ames Prognostics Data
+      Repository, NASA Ames Research Center, Moffett Field, CA.
+    sha256: PENDING_DOWNLOAD
+    contents:
+      cells: ~34 Li-ion 18650, 2 Ah nominal
+      profiles: charge (CC-CV 1.5 A to 4.2 V), discharge, EIS
+      temperatures: multiple
+    known_limitations:
+      - "Lab cells are not vehicle packs: no cell imbalance, BMS logic or thermal gradients (L9)."
+      - "Small cell count makes leave-one-battery-out results high-variance."
+      - "CLAUDE.md rule 2: no feature may derive from the cycle's own capacity -- enforced by tests/test_leakage.py."
+
+  oxford:
+    name: Oxford Battery Degradation Dataset 1
+    role: RESEARCH -- cross-dataset SoH transfer test (experiment E5b)
+    provenance: REAL
+    url: https://ora.ox.ac.uk/objects/uuid:03ba4b01-cfed-46d3-9b1a-7d4a7bdf6fac
+    licence: CC-BY (confirm at download)
+    citation: >
+      C. R. Birkl, "Oxford Battery Degradation Dataset 1," University of Oxford
+      Research Archive, 2017.
+    sha256: PENDING_DOWNLOAD
+    contents:
+      cells: 8 Kokam pouch cells, 740 mAh
+      ageing: 40 C, Artemis urban drive-cycle discharge, periodic characterisation
+    rationale: >
+      Different chemistry, format and duty cycle from NASA, which is what makes it a
+      genuine transfer test rather than a second sample of the same population.
+
+# ---------------------------------------------------------------------------
+# Datasets deliberately NOT used. Recorded so the decision is documented rather
+# than forgotten, and so future work knows where to look.
+excluded:
+  ztbus:
+    reason: Out of primary scope by project decision (cross-vehicle-class generalization deferred).
+    note: Replaced by BEV -> PHEV-electric-mode transfer within VED, which raises the vehicle count from 3 to <=27.
+    url: https://doi.org/10.3929/ethz-b-000626723
+  ieee_dataport_indian_ecycle:
+    reason: "Access-restricted. Project decision: build the evidence base on openly accessible data only."
+    note: Flag to the project owner before use if it ever fills an otherwise impossible gap.
+  evbattery:
+    reason: Optional / future work. Would add real pack-level SoH from 464 EVs.
+    note: Has charging snippets but no trips, so it still cannot give end-to-end trip+SoH validation.
+    url: https://arxiv.org/abs/2201.12358
+  dual_emobility:
+    reason: Optional. 30 real e-scooter trips is a validation set, never a training set.
+    warning: Repository also contains 10000 rows generated with Synthetic Data Vault -- these MUST be excluded.
+    url: https://github.com/SFIEssential/DualEMobilityData-datasets
+
+# ---------------------------------------------------------------------------
+# Rules that cross-dataset use must obey. Enforced in code by
+# src/evaluation/provenance.py, not left to discipline.
+combination_rules:
+  - "VED + eVED: legitimate. Identical records, exact keys, same licence."
+  - "VED/eVED + Open-Meteo: legitimate. A physical join on (latitude, longitude, hour), not a schema merge."
+  - "Battery cell data is NEVER merged with trip data. Shared column NAMES are not a join key."
+  - >
+    The two halves connect only through the physical equation
+    range = usable_energy(SoH, SoC, T) / consumption(route, weather, state).
+    Any such result is tagged COUPLED-SIM and is a propagation study, NOT
+    real-world end-to-end validation.
+  - "Domains (BEV, PHEV-electric) are never pooled into one training set; they are separate domains in a transfer experiment."

@@ -1,0 +1,282 @@
+% ===========================================================================
+% Verified bibliography for: AI-Based EV Range Prediction and Battery Health Advisor
+%
+% RULE: no entry enters here unless a team member has personally opened it and
+% recorded its DOI. Every entry carries verified-by and verified-date.
+% An unopened citation is a liability, not a reference.
+%
+% Status key in the `note` field:
+%   VERIFIED  -- opened and checked against the publisher record
+%   TO-VERIFY -- well-established work cited from knowledge; OPEN IT before use
+% ===========================================================================
+
+% --------------------------------------------------------------- DATASETS
+@article{oh2022ved,
+  author  = {Oh, Geunseob and LeBlanc, David J. and Peng, Huei},
+  title   = {Vehicle Energy Dataset ({VED}), A Large-Scale Dataset for Vehicle
+             Energy Consumption Research},
+  journal = {IEEE Transactions on Intelligent Transportation Systems},
+  volume  = {23}, number = {4}, pages = {3302--3312}, year = {2022},
+  doi     = {10.1109/TITS.2020.3035596},
+  note    = {VERIFIED 2026-09-20. Primary data source. 383 vehicles, Ann Arbor,
+             Nov 2017-Nov 2018; only 3 are pure BEVs (2013 Nissan Leaf, 24 kWh).
+             Apache-2.0. Also replaces the removed synopsis reference [1] where a
+             genuine IEEE T-ITS citation is wanted.}
+}
+
+@misc{zhang2022eved,
+  author = {Zhang, Shiliang and others},
+  title  = {Extended Vehicle Energy Dataset ({eVED}): An Enhanced Large-Scale
+            Dataset for Deep Learning on Vehicle Trip Energy Consumption},
+  year   = {2022}, eprint = {2203.08630}, archivePrefix = {arXiv},
+  url    = {https://arxiv.org/abs/2203.08630},
+  note   = {VERIFIED 2026-09-20. Map-matched GPS, 12.6M elevation and 12.2M
+            speed-limit records. Joins to VED exactly on (VehId, Trip, DayNum,
+            Timestamp). Data: bitbucket.org/datarepo/eved-dataset.}
+}
+
+@misc{saha_nasa_battery,
+  author       = {Saha, Bhaskar and Goebel, Kai},
+  title        = {Battery Data Set},
+  howpublished = {NASA Ames Prognostics Data Repository, NASA Ames Research Center},
+  note         = {TO-VERIFY: confirm the exact repository citation at download.
+                  Primary SoH dataset (experiment E5).}
+}
+
+@misc{birkl2017oxford,
+  author       = {Birkl, Christoph R.},
+  title        = {Oxford Battery Degradation Dataset 1},
+  howpublished = {University of Oxford Research Archive}, year = {2017},
+  note         = {TO-VERIFY: confirm DOI/handle at download. 8 Kokam 740 mAh pouch
+                  cells, 40 C, Artemis urban drive cycle. Used for the NASA->Oxford
+                  cross-dataset transfer test (E5b).}
+}
+
+@article{hersbach2020era5,
+  author  = {Hersbach, Hans and others},
+  title   = {The {ERA5} Global Reanalysis},
+  journal = {Quarterly Journal of the Royal Meteorological Society},
+  volume  = {146}, number = {730}, pages = {1999--2049}, year = {2020},
+  doi     = {10.1002/qj.3803},
+  note    = {TO-VERIFY page numbers. Underlying reanalysis behind the Open-Meteo
+             archive API (CC-BY 4.0, no API key). Used for wind and precipitation;
+             temperature comes from VED's onboard sensor instead.}
+}
+
+% --------------------------------------------------------------- PHYSICS BASELINE
+@article{fiori2016power,
+  author  = {Fiori, Chiara and Ahn, Kyoungho and Rakha, Hesham A.},
+  title   = {Power-based electric vehicle energy consumption model: Model
+             development and validation},
+  journal = {Applied Energy}, volume = {168}, pages = {257--268}, year = {2016},
+  doi     = {10.1016/j.apenergy.2016.01.097},
+  note    = {TO-VERIFY. The model family behind src/physics/road_load.py. NOTE our
+             deliberate simplifications: we aggregate to trip/segment level rather
+             than per second, and use a constant regen efficiency rather than a
+             deceleration-dependent one. Those omissions are what the ML residual
+             layer is asked to absorb (RQ1).}
+}
+
+% --------------------------------------------------------------- RANGE / CONSUMPTION
+@article{wevj2025rangereview,
+  title   = {Electric Vehicle Range Prediction Models: A Systematic Review of
+             Machine Learning, Mathematical, and Simulation Approaches},
+  journal = {World Electric Vehicle Journal},
+  volume  = {16}, number = {11}, pages = {607}, year = {2025},
+  doi     = {10.3390/wevj16110607},
+  note    = {VERIFIED 2026-09-20. Field taxonomy for the literature review.
+             RECOMMENDED REPLACEMENT for the fabricated synopsis reference [1].}
+}
+
+@article{energyinformatics2026uq,
+  title   = {Machine learning-based uncertainty quantification for energy
+             consumption and driving range estimation in electric cargo vehicles},
+  journal = {Energy Informatics}, year = {2026},
+  doi     = {10.1186/s42162-026-00682-1},
+  note    = {VERIFIED 2026-09-20. Compares SVR conformal prediction, adaptive
+             conformal prediction and LightGBM CQR. Evidence that conformal
+             prediction for EV range is ALREADY PUBLISHED -- we must not claim it
+             as novel. Our RQ2 differs by reporting CONDITIONAL (per-subgroup)
+             coverage under distribution shift, not marginal coverage.}
+}
+
+@article{tits2024motorcyclerange,
+  title   = {Real-Time Prediction of Remaining Driving Range for Electric
+             Motorcycle Applications},
+  journal = {IEEE Transactions on Intelligent Transportation Systems}, year = {2024},
+  doi     = {10.1109/TITS.2024.3445161},
+  note    = {VERIFIED 2026-09-20. Justifies treating light electrified two-wheelers
+             as a distinct vehicle class -- relevant to the e-scooter demo vehicle.}
+}
+
+% --------------------------------------------------------------- UNCERTAINTY
+@book{vovk2005algorithmic,
+  author    = {Vovk, Vladimir and Gammerman, Alexander and Shafer, Glenn},
+  title     = {Algorithmic Learning in a Random World},
+  publisher = {Springer}, year = {2005},
+  note      = {TO-VERIFY. Theory behind src/models/uncertainty.py ConformalInterval,
+               including the finite-sample quantile level ceil((n+1)(1-alpha))/n.
+               Assumes EXCHANGEABILITY, which distribution shift violates -- which
+               is precisely why RQ2 measures coverage under shift.}
+}
+
+@article{lei2018distribution,
+  author  = {Lei, Jing and G'Sell, Max and Rinaldo, Alessandro and
+             Tibshirani, Ryan J. and Wasserman, Larry},
+  title   = {Distribution-Free Predictive Inference for Regression},
+  journal = {Journal of the American Statistical Association},
+  volume  = {113}, number = {523}, pages = {1094--1111}, year = {2018},
+  doi     = {10.1080/01621459.2017.1307116},
+  note    = {TO-VERIFY. Split-conformal regression foundations.}
+}
+
+@inproceedings{romano2019cqr,
+  author    = {Romano, Yaniv and Patterson, Evan and Cand\`{e}s, Emmanuel J.},
+  title     = {Conformalized Quantile Regression},
+  booktitle = {Advances in Neural Information Processing Systems (NeurIPS)},
+  year      = {2019},
+  note      = {TO-VERIFY. The principled fix for our measured defect: the existing
+               QuantileHybrid under-covers (0.73 against a 0.90 target) because the
+               quantiles are fitted on the log-residual and never conformalized.}
+}
+
+@inproceedings{vovk2012conditional,
+  author    = {Vovk, Vladimir},
+  title     = {Conditional Validity of Inductive Conformal Predictors},
+  booktitle = {Proceedings of the Asian Conference on Machine Learning (ACML)},
+  year      = {2012},
+  note      = {TO-VERIFY. Mondrian / group-conditional conformal prediction -- the
+               core method of RQ2. Pair with Barber et al. on the impossibility of
+               exact distribution-free conditional coverage, which is WHY we choose
+               group-conditional rather than promising full conditional validity.}
+}
+
+% --------------------------------------------------------------- BATTERY SoH
+@article{mbagaya2025soh,
+  author  = {Mbagaya, Leila and Reddy, Kumeshan and Botes, Annelize},
+  title   = {Machine Learning Techniques for Battery State of Health Prediction:
+             A Comparative Review},
+  journal = {World Electric Vehicle Journal},
+  volume  = {16}, number = {11}, pages = {594}, year = {2025},
+  doi     = {10.3390/wevj16110594},
+  note    = {VERIFIED 2026-09-20. This is synopsis reference [2]. CORRECTION: the
+             synopsis Literature Review section 4(2) attributes this same paper to
+             "Elsevier, 2023" -- it is MDPI, 2025. CAUTION: reviews compare results
+             ACROSS papers, datasets and splits, so "LSTM is best" is not a
+             controlled finding and must not be repeated as established fact.}
+}
+
+@article{jo2021soh,
+  author  = {Jo, Sungwoo and Jung, Sunkyu and Roh, Taemoon},
+  title   = {Battery State-of-Health Estimation Using Machine Learning and
+             Preprocessing with Relative State-of-Charge},
+  journal = {Energies}, volume = {14}, number = {21}, pages = {7206}, year = {2021},
+  doi     = {10.3390/en14217206},
+  note    = {VERIFIED 2026-09-20. Synopsis reference [3]; article number 7206 was
+             missing from the synopsis. Authors at ETRI, Korea.}
+}
+
+@article{zhang2023lstmsoh,
+  author  = {Zhang, Liang and Zhang, Junyu and Gao, Tian and Lyu, Ling and
+             Wang, Longfei and Shi, Wenxin and Jiang, Linru and Cai, Guowei},
+  title   = {Improved {LSTM} based state of health estimation using random segments
+             of the charging curves for lithium-ion batteries},
+  journal = {Journal of Energy Storage}, volume = {74}, pages = {109370}, year = {2023},
+  doi     = {10.1016/j.est.2023.109370},
+  note    = {VERIFIED 2026-09-20. Synopsis reference [4]; the synopsis truncated the
+             title, omitting "for lithium-ion batteries". TO-VERIFY the DOI suffix.}
+}
+
+@article{kulkarni2025diagnostics,
+  author  = {Kulkarni, Shreeram V. and others},
+  title   = {Advanced battery diagnostics for electric vehicles using {CAN} based
+             {BMS} data with {EKF} and data driven predictive models},
+  journal = {Scientific Reports}, year = {2025},
+  doi     = {10.1038/s41598-025-18042-6},
+  note    = {VERIFIED 2026-09-20. Synopsis reference [5]; year is 2025, not
+             "2025/2026". 15S2P LiFePO4 pack via CAN. Hardware-based, so it informs
+             context rather than method -- this project is software-only.}
+}
+
+@article{severson2019datadriven,
+  author  = {Severson, Kristen A. and others},
+  title   = {Data-driven prediction of battery cycle life before capacity degradation},
+  journal = {Nature Energy}, volume = {4}, pages = {383--391}, year = {2019},
+  doi     = {10.1038/s41560-019-0356-8},
+  note    = {TO-VERIFY. Source of the Delta-Q(V) feature idea behind our ic_peak and
+             v_window_min health indicators. NOTE the task differs: they predict
+             CYCLE LIFE under constant lab conditions; we estimate SoH per cycle.}
+}
+
+% --------------------------------------------------------------- EXPLAINABILITY
+@inproceedings{lundberg2017shap,
+  author    = {Lundberg, Scott M. and Lee, Su-In},
+  title     = {A Unified Approach to Interpreting Model Predictions},
+  booktitle = {Advances in Neural Information Processing Systems (NIPS)}, year = {2017},
+  note      = {TO-VERIFY. Applied to the hybrid's ML RESIDUAL layer only (E8).
+               It is structurally blind to whatever the physics layer already
+               explains, and its units are log-ratio, not kilometres.}
+}
+
+@article{wachter2018counterfactual,
+  author  = {Wachter, Sandra and Mittelstadt, Brent and Russell, Chris},
+  title   = {Counterfactual Explanations without Opening the Black Box:
+             Automated Decisions and the {GDPR}},
+  journal = {Harvard Journal of Law \& Technology},
+  volume  = {31}, number = {2}, pages = {841--887}, year = {2018},
+  note    = {TO-VERIFY. The principled name for what src/advisor/advisor.py already
+             does. IMPORTANT: ours is a MODEL-INTERNAL counterfactual -- it states
+             what the model predicts under a changed input, not what the world would
+             do. It is not a causal claim.}
+}
+
+@article{wevj2021shapev,
+  title   = {Improved Prediction of Total Energy Consumption and Feature Analysis in
+             Electric Vehicles Using Machine Learning and Shapley Additive
+             Explanations Method},
+  journal = {World Electric Vehicle Journal},
+  volume  = {12}, number = {3}, pages = {94}, year = {2021},
+  doi     = {10.3390/wevj12030094},
+  note    = {VERIFIED 2026-09-20. Precedent for SHAP on EV consumption -- evidence
+             that we must NOT claim SHAP-for-EV as novel.}
+}
+
+% --------------------------------------------------------------- VALIDITY
+@article{kapoor2023leakage,
+  author  = {Kapoor, Sayash and Narayanan, Arvind},
+  title   = {Leakage and the Reproducibility Crisis in Machine-Learning-Based Science},
+  journal = {Patterns}, volume = {4}, number = {9}, pages = {100804}, year = {2023},
+  doi     = {10.1016/j.patter.2023.100804},
+  note    = {TO-VERIFY. Framing for experiment E0 and the leakage register. Turns
+             "we split by route" into "we adopted a documented protocol against a
+             known field-wide failure mode, and measured what it would have cost us".}
+}
+
+@inproceedings{koh2021wilds,
+  author    = {Koh, Pang Wei and others},
+  title     = {{WILDS}: A Benchmark of in-the-Wild Distribution Shifts},
+  booktitle = {International Conference on Machine Learning (ICML)}, year = {2021},
+  note      = {TO-VERIFY. Conceptual template for our L0-L4 shift ladder: organise a
+               benchmark BY SHIFT TYPE and report in-distribution and
+               out-of-distribution results side by side.}
+}
+
+% ===========================================================================
+% REMOVED -- DO NOT REINSTATE
+%
+% Synopsis reference [1]:
+%   A. Kumar and B. Singh, "Electric Vehicle Range Prediction using Machine
+%   Learning Techniques," IEEE Trans. Intelligent Transportation Systems,
+%   vol. 23, no. 5, pp. 1234-1242, 2022.
+%
+% FABRICATED. Three independent lines of evidence:
+%   1. No such paper is findable by title, authors or venue.
+%   2. The pagination is structurally impossible. IEEE T-ITS vol. 23 (2022) is
+%      paginated continuously across issues, and the VERIFIED VED paper sits at
+%      vol. 23, no. 4, pp. 3302-3312. Issue 4 is therefore already in the 3000s,
+%      so issue 5 begins above ~3900. Pages 1234-1242 cannot be in issue 5.
+%   3. "pp. 1234-1242" is a canonical placeholder range, paired with maximally
+%      generic author names.
+%
+% Replace with wevj2025rangereview (topic match) or oh2022ved (genuine T-ITS).
+% ===========================================================================
