@@ -10,7 +10,7 @@ import pandas as pd
 import pytest
 
 from src.data.ved import (build_segment_table, daynum_to_utc, derive_route_ids,
-                          haversine_m)
+                          haversine_m, parse_speed_limit)
 
 
 def fake_trip(veh=10, trip=1, n=71, dt_s=1.0, volts=360.0, amps=-10.0,
@@ -159,3 +159,47 @@ def test_tighter_tolerance_splits_a_journey_which_is_the_leakage_direction():
 
 def test_haversine_one_degree_latitude():
     assert haversine_m(0, 0, 1, 0) == pytest.approx(111195, rel=1e-3)
+
+
+# --------------------------------------------------------------- eVED enrichment
+def test_speed_limit_parser_handles_ranges_and_junk():
+    out = parse_speed_limit(["48", "48-40", "56-72", None, "bad", float("nan")])
+    assert out[0] == 48.0
+    assert out[1] == 44.0          # mean of the posted range, not the first number
+    assert out[2] == 64.0
+    assert np.isnan(out[3]) and np.isnan(out[4]) and np.isnan(out[5])
+
+
+def enriched_trip(**kw):
+    t = fake_trip(**kw)
+    n = len(t)
+    # climb 20 m then descend 10 m, so gain and loss differ and net is +10
+    up = np.linspace(0, 20, n // 2)
+    down = np.linspace(20, 10, n - n // 2)
+    t["Elevation Smoothed[m]"] = np.concatenate([up, down])
+    t["Gradient"] = 0.01
+    t["Speed Limit[km/h]"] = "56"
+    return t
+
+
+def test_elevation_gain_and_loss_are_separated():
+    seg, _ = build_segment_table(enriched_trip())
+    r = seg.iloc[0]
+    assert r.elev_gain_m == pytest.approx(20.0, abs=0.5)
+    assert r.elev_loss_m == pytest.approx(10.0, abs=0.5)
+    assert r.net_elev_m == pytest.approx(10.0, abs=0.5)
+    assert r.elev_span_m == pytest.approx(20.0, abs=0.5)
+
+
+def test_congestion_proxy_is_limit_minus_observed_speed():
+    seg, _ = build_segment_table(enriched_trip(speed_kmh=36.0))
+    r = seg.iloc[0]
+    assert r.speed_limit_kmh == pytest.approx(56.0)
+    assert r.speed_deficit_kmh == pytest.approx(20.0, abs=0.5)   # 56 - 36
+
+
+def test_enrichment_columns_are_optional():
+    """Plain VED, without eVED, must still produce a usable table."""
+    seg, _ = build_segment_table(fake_trip())
+    assert len(seg) == 1
+    assert "elev_gain_m" not in seg.columns or pd.isna(seg.elev_gain_m.iloc[0])

@@ -211,6 +211,54 @@ At least four effects are confounded and this data cannot separate them:
 | Wind / rain | **Retained**, low-confidence, contribution measured in E3 |
 | Trip semantics | "Analysis segment": a recorded fragment, median 3.6 km, not a full journey |
 
+## 6b. eVED — the join that turned out not to be a join
+
+**Verified on the BEV rows:** eVED is a **strict superset** of VED, not a companion
+table. For one week: identical row counts (3,633 = 3,633), identical trip counts
+(11 = 11), a **100.0 % exact match** on `(VehId, Trip, Timestamp)`, and
+**bit-identical** `HV Battery Current`, `Voltage`, `Vehicle Speed` and `OAT`.
+
+> **Consequence: there is no join to get wrong.** The loader reads eVED directly and
+> falls back to plain VED only if eVED is absent. This removes an entire risk class
+> (K3) rather than mitigating it. Also note the published clone URL carries a
+> `Datarepo@` username; the repository is public and needs no credential, and the
+> data is one 656 MB zip that is better fetched directly than cloned.
+
+Enrichment availability on BEV rows: elevation **100 %**, gradient **98.5 %**,
+speed limit **99.1 %** (stored as text; ~1 % are ranges such as `48-40` where the
+posted limit changes along the way, parsed as the mean of the endpoints).
+
+### 6b.1 🔴 Terrain: the instantaneous grade is dead, the cumulative climb is not
+
+| Statistic | Value |
+|---|---|
+| rows with \|gradient\| < 0.5 % | **96.7 %** |
+| rows with \|gradient\| > 2 % | **0.22 %** |
+| gradient std | 0.0023 (0.23 %) |
+| median per-trip elevation **gain** | **41 m** (mean 49, max 212) |
+| mean per-trip **net** elevation change | **−1.2 m** |
+
+Two conclusions, and they point in opposite directions:
+
+- **`mean_grade_pct` is a dead feature here** (std 0.03 percentage points across
+  segments). Limitation L3 is confirmed quantitatively: this data cannot excite the
+  instantaneous-slope term, so nothing about steep-terrain performance is testable.
+- **But terrain still costs real energy.** Trips return to roughly their starting
+  altitude (net −1.2 m), yet a median trip climbs 41 m, and climbing costs `1/η`
+  while descending returns only `η_regen`. For the median trip that asymmetry is
+  ≈ 137 Wh spent against ≈ 70 Wh recovered — a **net ≈ 67 Wh, about 12 % of the
+  568 Wh median trip energy**.
+
+> So the loader exposes `elev_gain_m` and `elev_loss_m` rather than an average
+> gradient. A project that had only computed mean grade would have concluded,
+> wrongly, that terrain is irrelevant in this dataset.
+
+### 6b.2 The traffic proxy is real
+`speed_deficit_kmh` = posted limit − observed speed: mean **20.3 km/h**, std 9.6,
+range −8 to 66. It has genuine spread, so the synopsis's traffic objective is
+addressed by a reproducible derived feature rather than a paid API. It remains a
+**proxy** (tag D), and E3 will measure its contribution rather than assume it.
+
 ## 7. Still to verify
 - Per-vehicle availability of HVAC channels for 541 (only 10 trips).
 - eVED download and the exact record-level join (Phase 0 verified the keys; the join itself is untested).

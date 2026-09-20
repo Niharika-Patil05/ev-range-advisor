@@ -40,6 +40,13 @@ DIRECT_DOWNLOADS: dict[str, list[tuple[str, str]]] = {
         ("VED_Static_Data_PHEV&EV.xlsx",
          "https://github.com/gsoh/VED/raw/master/Data/VED_Static_Data_PHEV%26EV.xlsx"),
     ],
+    # Published as one 656 MB zip. Fetched directly rather than by git clone, which
+    # would also pull the repository history for no benefit. The documented clone URL
+    # carries a "Datarepo@" username; the repository is public and needs no credential.
+    "eved": [
+        ("eVED.zip",
+         "https://bitbucket.org/datarepo/eved-dataset/raw/main/data/eVED.zip"),
+    ],
 }
 
 
@@ -112,6 +119,20 @@ def record_hashes(dataset: str, hashes: dict[str, str]) -> None:
         print("  manifest already recorded a hash; leaving it alone")
 
 
+def extract_eved() -> None:
+    """Unpack the eVED zip into data/raw/eved/."""
+    import zipfile
+
+    out = RAW / "eved"
+    src = out / "eVED.zip"
+    with zipfile.ZipFile(src) as z:
+        names = z.namelist()
+        print(f"  archive holds {len(names)} entries; extracting ...")
+        z.extractall(path=out)
+    csvs = list(out.rglob("*.csv"))
+    print(f"  extracted {len(csvs)} CSV file(s) to {out.relative_to(ROOT)}")
+
+
 def extract_ved() -> None:
     """Unpack the VED .7z archives into data/raw/ved/dynamic/."""
     import py7zr
@@ -150,8 +171,8 @@ def main() -> None:
     print(f"Fetching '{args.dataset}' ...")
     hashes = fetch(args.dataset, force=args.force)
     record_hashes(args.dataset, hashes)
-    if args.extract and args.dataset == "ved":
-        extract_ved()
+    if args.extract:
+        {"ved": extract_ved, "eved": extract_eved}.get(args.dataset, lambda: None)()
     print("Done.")
 
 

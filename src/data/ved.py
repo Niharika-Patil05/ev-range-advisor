@@ -36,6 +36,18 @@ BEV_VEHICLE_IDS: tuple[int, ...] = (10, 455, 541)
 
 RAW_DIR = DATA_DIR / "raw" / "ved"
 DYNAMIC_DIR = RAW_DIR / "dynamic"
+EVED_DIR = DATA_DIR / "raw" / "eved" / "eVED"
+
+# eVED is a strict SUPERSET of VED, not a companion table needing a join. Verified on
+# the BEV rows of one week: identical row and trip counts, a 100% exact match on
+# (VehId, Trip, Timestamp), and bit-identical HV current, voltage, speed and OAT.
+# Reading eVED directly therefore removes an entire class of join risk, and is
+# preferred whenever the files are present.
+ENRICHED_COLUMNS = [
+    "Elevation Smoothed[m]", "Elevation Raw[m]", "Gradient",
+    "Matchted Latitude[deg]", "Matched Longitude[deg]",   # sic: typo is theirs
+    "Speed Limit[km/h]", "Match Type",
+]
 
 NEEDED_COLUMNS = [
     "DayNum", "VehId", "Trip", "Timestamp(ms)",
@@ -66,19 +78,28 @@ def daynum_to_utc(daynum: pd.Series) -> pd.Series:
 
 
 def load_raw(vehicle_ids: tuple[int, ...] = BEV_VEHICLE_IDS,
-             dynamic_dir: Path = DYNAMIC_DIR,
-             columns: list[str] | None = None) -> pd.DataFrame:
-    """Read the weekly CSVs, keeping only the requested vehicles."""
-    files = sorted(Path(dynamic_dir).glob("VED_*_week.csv"))
+             dynamic_dir: Path | None = None,
+             columns: list[str] | None = None,
+             prefer_enriched: bool = True) -> pd.DataFrame:
+    """Read the weekly CSVs, keeping only the requested vehicles.
+
+    Prefers eVED (which carries VED's columns plus elevation, gradient and speed
+    limits) and falls back to plain VED, so the pipeline runs either way.
+    """
+    enriched = prefer_enriched and any(Path(EVED_DIR).glob("eVED_*_week.csv"))
+    if dynamic_dir is None:
+        dynamic_dir = EVED_DIR if enriched else DYNAMIC_DIR
+    pattern = "eVED_*_week.csv" if enriched else "VED_*_week.csv"
+    files = sorted(Path(dynamic_dir).glob(pattern))
     if not files:
         raise FileNotFoundError(
-            f"No VED weekly CSVs in {dynamic_dir}. "
-            f"Run: python scripts/fetch_data.py --dataset ved --extract"
+            f"No weekly CSVs in {dynamic_dir}. Run: "
+            f"python scripts/fetch_data.py --dataset ved --extract   (and --dataset eved)"
         )
-    cols = columns or NEEDED_COLUMNS
+    cols = (columns or NEEDED_COLUMNS) + (ENRICHED_COLUMNS if enriched else [])
     frames = []
     for f in files:
-        d = pd.read_csv(f, usecols=cols, low_memory=False)
+        d = pd.read_csv(f, usecols=lambda c: c in cols, low_memory=False)
         d = d[d["VehId"].isin(vehicle_ids)]
         if len(d):
             frames.append(d)
@@ -91,6 +112,25 @@ def haversine_m(lat1, lon1, lat2, lon2):
     dlmb = np.radians(np.asarray(lon2) - np.asarray(lon1))
     a = np.sin(dphi / 2) ** 2 + np.cos(p1) * np.cos(p2) * np.sin(dlmb / 2) ** 2
     return 2 * EARTH_RADIUS_M * np.arcsin(np.sqrt(a))
+
+
+def parse_speed_limit(values) -> np.ndarray:
+    """eVED stores the limit as text, and ~1% of rows carry a range like '48-40'
+    where the posted limit changes along the matched way. Take the mean of the
+    endpoints rather than dropping the row or silently picking the first number."""
+    out = []
+    for v in values:
+        if v is None or (isinstance(v, float) and np.isnan(v)):
+            out.append(np.nan)
+            continue
+        parts = [p for p in str(v).split("-") if p.strip()]
+        try:
+            nums = [float(p) for p in parts]
+        except ValueError:
+            out.append(np.nan)
+        else:
+            out.append(float(np.mean(nums)) if nums else np.nan)
+    return np.asarray(out, dtype=float)
 
 
 def _segment_row(d: pd.DataFrame) -> dict | None:
@@ -132,7 +172,45 @@ def _segment_row(d: pd.DataFrame) -> dict | None:
     soc = d["HV Battery SOC[%]"].to_numpy(float)
 
     duration_s = float(dt.sum())
-    return dict(
+
+    # ---- eVED enrichment, when present -------------------------------------
+    # Terrain note (docs/PHASE1_DATA_FINDINGS.md): Ann Arbor is gently rolling, and
+    # 96.7% of rows have |gradient| < 0.5%, so an average-grade feature is close to
+    # dead. Cumulative climb is NOT: a median trip gains ~28 m, and because climbing
+    # costs 1/eta while descending returns only eta_regen, terrain still accounts for
+    # roughly 12% of trip energy. Hence elev_gain_m and elev_loss_m rather than a
+    # mean gradient.
+    extra: dict = {}
+    if "Elevation Smoothed[m]" in d.columns:
+        el = d["Elevation Smoothed[m]"].to_numpy(float)
+        dz = np.diff(el)
+        extra.update(
+            elev_gain_m=float(np.nansum(np.clip(dz, 0, None))),
+            elev_loss_m=float(np.nansum(np.clip(dz, None, 0)) * -1.0),
+            elev_span_m=float(np.nanmax(el) - np.nanmin(el)),
+            net_elev_m=float(el[-1] - el[0]),
+        )
+    if "Gradient" in d.columns:
+        gr = d["Gradient"].to_numpy(float)[:-1]
+        w = dt / max(dt.sum(), 1e-9)
+        extra.update(
+            mean_grade_pct=float(np.nansum(np.nan_to_num(gr) * w) * 100.0),
+            abs_grade_pct=float(np.nansum(np.abs(np.nan_to_num(gr)) * w) * 100.0),
+        )
+    if "Speed Limit[km/h]" in d.columns:
+        lim = parse_speed_limit(d["Speed Limit[km/h]"].to_numpy(object))[:-1]
+        spd_kmh = speed_ms[:-1] * 3.6
+        ok = np.isfinite(lim)
+        if ok.any():
+            # Congestion proxy: how far below the posted limit the vehicle actually
+            # travelled. DERIVED, and a proxy -- VED has no traffic feed. This is how
+            # the project addresses the synopsis's traffic objective reproducibly.
+            extra.update(
+                speed_limit_kmh=float(np.nansum(lim[ok] * dt[ok]) / np.nansum(dt[ok])),
+                speed_deficit_kmh=float(
+                    np.nansum((lim[ok] - spd_kmh[ok]) * dt[ok]) / np.nansum(dt[ok])),
+            )
+    return dict(**extra, 
         vehicle_id=int(d["VehId"].iloc[0]),
         trip=int(d["Trip"].iloc[0]),
         daynum=float(d["DayNum"].iloc[0]),
@@ -170,6 +248,9 @@ _SEGMENT_COLUMNS = (
     "stops_per_km", "accel_pos_mean", "temp_c", "aux_power_w", "hvac_on",
     "soc_start", "soc_end", "soc_drop_pp",
     "lat_start", "lon_start", "lat_end", "lon_end",
+    # present only when eVED enrichment is available
+    "elev_gain_m", "elev_loss_m", "elev_span_m", "net_elev_m",
+    "mean_grade_pct", "abs_grade_pct", "speed_limit_kmh", "speed_deficit_kmh",
 )
 
 

@@ -59,7 +59,7 @@ datasets:
       S. Zhang et al., "Extended vehicle energy dataset (eVED): an enhanced
       large-scale dataset for deep learning on vehicle trip energy consumption,"
       arXiv:2203.08630, 2022.
-    sha256: PENDING_DOWNLOAD
+    sha256: "sha256sums: eVED.zip=4ce320ef96f7a919..."
     join:
       keys: [VehId, Trip, DayNum, Timestamp]
       type: exact record-level join to VED
