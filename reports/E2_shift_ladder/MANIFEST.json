@@ -1,0 +1,26 @@
+{
+  "experiment": "E2_shift_ladder",
+  "description": "Degradation of every model across four levels of distribution shift",
+  "timestamp_utc": "2026-09-20T19:47:23+00:00",
+  "git_revision": "9ced94e-dirty",
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "n_rows_per_seed": 30,
+  "provenance": "REAL",
+  "conclusion_type": "DEMONSTRATED",
+  "split_protocol": "L0 random / L1 route-wise / L2 temperature regime / L3 leave-one-vehicle-out / L3b vehicle AND route disjoint; 5 seeds",
+  "n": "480 segments, 134 routes, 2 usable vehicles of 3",
+  "python": "3.14.4",
+  "numpy": "2.5.3",
+  "pandas": "3.0.6",
+  "config": {
+    "eps_m": 500.0,
+    "cold_quantile": 0.3333333333333333
+  },
+  "data_files": {}
+}

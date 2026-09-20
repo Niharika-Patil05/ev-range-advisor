@@ -26,10 +26,18 @@ Fold = tuple[np.ndarray, np.ndarray]
 
 
 class SplitProtocol(ABC):
-    """A named evaluation protocol. `split` yields positional index arrays."""
+    """A named evaluation protocol. `split` yields positional index arrays.
+
+    `disjoint_keys` declares what the protocol GUARANTEES to hold apart, so an
+    experiment can assert exactly that and nothing more. This matters: a
+    leave-one-vehicle-out split does not automatically separate routes, and
+    asserting route disjointness there would be asserting something the protocol
+    never promised.
+    """
 
     level: str = "??"
     name: str = "unnamed"
+    disjoint_keys: tuple[str, ...] = ("route_id",)
 
     @abstractmethod
     def split(self, df: pd.DataFrame) -> Iterator[Fold]:
@@ -52,6 +60,7 @@ class RandomRows(SplitProtocol):
     """
 
     level, name = "L0", "random rows (leaky control)"
+    disjoint_keys = ()          # guarantees nothing; that is the point
 
     def __init__(self, test_size: float = 0.25, seed: int = 0, n_splits: int = 1):
         self.test_size, self.seed, self.n_splits = test_size, seed, n_splits
@@ -181,9 +190,51 @@ class LeaveOneVehicleOut(LeaveOneGroupOut):
     """
 
     level, name = "L3", "unseen vehicle (leave-one-vehicle-out)"
+    disjoint_keys = ("vehicle_id",)     # NOT route_id -- see the class docstring
 
     def __init__(self, group_col: str = "vehicle_id"):
         super().__init__(group_col)
+
+
+class LeaveOneVehicleOutRouteDisjoint(SplitProtocol):
+    """L3b -- unseen vehicle AND unseen routes.
+
+    Plain L3 holds out a vehicle but not its roads. On this data 16-30% of each
+    L3 test set sits on a route that also appears in training, so L3 measures
+    vehicle transfer with some route familiarity retained. That is a legitimate
+    thing to measure -- it isolates the vehicle effect while holding the road
+    roughly constant -- but it is NOT "unseen vehicle on unseen ground", and
+    reporting it as such would overstate generalization.
+
+    L3b additionally drops from training every route the held-out vehicle drives.
+    It is the harder and cleaner claim, at the cost of training data. Both are
+    reported, because they answer different questions.
+    """
+
+    level, name = "L3b", "unseen vehicle AND unseen routes"
+    disjoint_keys = ("vehicle_id", "route_id")
+
+    def __init__(self, vehicle_col: str = "vehicle_id", route_col: str = "route_id"):
+        self.vehicle_col, self.route_col = vehicle_col, route_col
+        self.last_attrition_: dict[str, float] = {}
+
+    def split(self, df: pd.DataFrame) -> Iterator[Fold]:
+        veh = df[self.vehicle_col].to_numpy()
+        for held in pd.unique(veh):
+            test_mask = veh == held
+            test_routes = set(df.loc[test_mask, self.route_col].unique())
+            train_mask = (~test_mask) & ~df[self.route_col].isin(test_routes).to_numpy()
+            train_idx = self._positions(df, train_mask)
+            test_idx = self._positions(df, test_mask)
+            self.last_attrition_ = {
+                "held_out_vehicle": held,
+                "n_train": int(len(train_idx)),
+                "n_test": int(len(test_idx)),
+                "n_dropped_for_route_disjointness": int((~test_mask).sum() - len(train_idx)),
+            }
+            if len(train_idx) == 0 or len(test_idx) == 0:
+                continue
+            yield train_idx, test_idx
 
 
 class LeaveOneBatteryOut(LeaveOneGroupOut):
@@ -233,5 +284,6 @@ LADDER: dict[str, type[SplitProtocol]] = {
     "L1": RouteWise,
     "L2": TemperatureRegime,
     "L3": LeaveOneVehicleOut,
+    "L3b": LeaveOneVehicleOutRouteDisjoint,
     "L4": CrossVehicleModel,
 }

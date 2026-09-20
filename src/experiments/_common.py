@@ -67,8 +67,10 @@ def evaluate(protocol, df: pd.DataFrame, vehicle: VehicleSpec, seed: int,
         errs, preds, truths, frames = [], [], [], []
         for tr, te in protocol.split(df):
             train, test = df.iloc[tr], df.iloc[te]
-            if leakage_check and protocol.level != "L0":
-                assert_disjoint_groups(train, test, "route_id", label=protocol.level)
+            if leakage_check:
+                # Assert exactly what this protocol promises -- no more, no less.
+                for key in getattr(protocol, "disjoint_keys", ("route_id",)):
+                    assert_disjoint_groups(train, test, key, label=protocol.level)
             m = factory().fit(train, train[TARGET])
             p = m.predict(test)
             preds.append(np.asarray(p, float))

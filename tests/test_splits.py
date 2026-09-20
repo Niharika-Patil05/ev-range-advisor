@@ -110,3 +110,35 @@ def test_leave_one_battery_out():
     assert len(folds) == 2
     for tr, te in folds:
         assert not set(cells.iloc[tr].battery_id) & set(cells.iloc[te].battery_id)
+
+
+def test_leave_one_vehicle_out_does_not_promise_route_disjointness():
+    """L3 separates vehicles, not roads. Two vehicles can drive the same route, so
+    asserting route disjointness there would assert something never promised."""
+    df = toy()
+    assert LeaveOneVehicleOut().disjoint_keys == ("vehicle_id",)
+    assert "route_id" not in LeaveOneVehicleOut().disjoint_keys
+
+
+def test_l3b_separates_vehicles_and_routes():
+    from src.evaluation.splits import LeaveOneVehicleOutRouteDisjoint
+    df = toy()
+    proto = LeaveOneVehicleOutRouteDisjoint()
+    assert proto.disjoint_keys == ("vehicle_id", "route_id")
+    for tr, te in proto.split(df):
+        assert not set(df.iloc[tr].vehicle_id) & set(df.iloc[te].vehicle_id)
+        assert not set(df.iloc[tr].route_id) & set(df.iloc[te].route_id)
+
+
+def test_l3b_is_stricter_than_l3():
+    """L3b must train on no more data than L3, because it drops shared routes."""
+    from src.evaluation.splits import LeaveOneVehicleOutRouteDisjoint
+    df = toy()
+    l3 = {int(df.iloc[te].vehicle_id.iloc[0] != df.iloc[te].vehicle_id.iloc[0]) or
+          len(tr) for tr, te in LeaveOneVehicleOut().split(df)}
+    l3b = {len(tr) for tr, te in LeaveOneVehicleOutRouteDisjoint().split(df)}
+    assert max(l3b) <= max(l3)
+
+
+def test_random_rows_promises_nothing():
+    assert RandomRows().disjoint_keys == ()
