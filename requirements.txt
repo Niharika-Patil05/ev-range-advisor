@@ -7,6 +7,8 @@ requests>=2.31
 streamlit>=1.35
 pytest>=8.0
 pyyaml>=6.0      # data/manifest.yaml
+py7zr>=0.20      # VED archives are .7z
+openpyxl>=3.1    # VED static vehicle tables are .xlsx
 # Optional upgrades (see README roadmap):
 # osmnx      # road type + speed limits from OpenStreetMap
 # shap       # per-feature attribution for the ML residual layer

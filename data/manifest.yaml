@@ -25,7 +25,7 @@ datasets:
       Dataset for Vehicle Energy Consumption Research," IEEE Transactions on
       Intelligent Transportation Systems, vol. 23, no. 4, pp. 3302-3312, 2022.
     doi: 10.1109/TITS.2020.3035596
-    sha256: PENDING_DOWNLOAD
+    sha256: "sha256sums: VED_DynamicData_Part1.7z=44d53754fd39e196... VED_DynamicData_Part2.7z=a235c894e619a9e0... VED_Static_Data_ICE&HEV.xlsx=addb23d937ef7d94... VED_Static_Data_PHEV&EV.xlsx=e0f2b4d7a360074c..."
     contents:
       vehicles: 383 total; 3 pure BEV (2013 Nissan Leaf, 24 kWh), 24 PHEV, rest ICE/HEV
       period: 2017-11-01 to 2018-11-01
