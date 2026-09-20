@@ -1,0 +1,8 @@
+{
+  "data": "SYNTHETIC - proves the pipeline works, not real-world accuracy",
+  "best_range_model": "hybrid_physics_ml",
+  "hybrid_MAPE": 2.926633950844446,
+  "conformal_coverage": 0.9133333333333333,
+  "soh_best": "random_forest",
+  "soh_best_MAE_pp": 1.1135633920707326
+}

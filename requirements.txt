@@ -1,0 +1,13 @@
+numpy>=1.26
+pandas>=2.1
+scikit-learn>=1.4
+matplotlib>=3.8
+joblib>=1.3
+requests>=2.31
+streamlit>=1.35
+pytest>=8.0
+# Optional upgrades (see README roadmap):
+# osmnx      # road type + speed limits from OpenStreetMap
+# shap       # per-feature attribution for the ML residual layer
+# torch      # LSTM / GRU SoH and sequence models
+# mapie      # more conformal-prediction variants
