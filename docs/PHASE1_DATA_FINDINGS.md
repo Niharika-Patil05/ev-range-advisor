@@ -243,21 +243,76 @@ Two conclusions, and they point in opposite directions:
 - **`mean_grade_pct` is a dead feature here** (std 0.03 percentage points across
   segments). Limitation L3 is confirmed quantitatively: this data cannot excite the
   instantaneous-slope term, so nothing about steep-terrain performance is testable.
-- **But terrain still costs real energy.** Trips return to roughly their starting
-  altitude (net −1.2 m), yet a median trip climbs 41 m, and climbing costs `1/η`
-  while descending returns only `η_regen`. For the median trip that asymmetry is
-  ≈ 137 Wh spent against ≈ 70 Wh recovered — a **net ≈ 67 Wh, about 12 % of the
-  568 Wh median trip energy**.
+- **Terrain still deserves gain/loss features rather than a mean** — but the effect
+  is small here, and an earlier estimate in this document was wrong.
 
-> So the loader exposes `elev_gain_m` and `elev_loss_m` rather than an average
-> gradient. A project that had only computed mean grade would have concluded,
-> wrongly, that terrain is irrelevant in this dataset.
+  ⚠️ **Correction.** A first hand-calculation put terrain at ≈ 67 Wh, about 12 % of
+  the 568 Wh median trip, by assuming every climb is tractive (costing `1/η`) and
+  every descent regenerative (returning `η_regen`). Integrating road load over the
+  actual traces does **not** support that. The drivetrain responds to the **net**
+  force, so on a gentle descent the vehicle is often still tractive and the
+  gravitational term is recovered at `1/η` rather than `η_regen`, which removes most
+  of the assumed asymmetry. The measured attribution is a **median `grade_wh` of
+  0.3 Wh per segment**, and `elev_gain_m` correlates with consumption at only
+  **r = +0.10**.
+
+  **Terrain is a weak effect in this dataset**, consistent with limitation L3. The
+  loader still exposes `elev_gain_m` and `elev_loss_m` rather than a mean gradient,
+  because gain/loss is the physically right form and the mean is provably dead
+  (r = +0.09), but neither should be expected to carry much weight. Pre-registered
+  hypothesis H4d anticipated this.
 
 ### 6b.2 The traffic proxy is real
 `speed_deficit_kmh` = posted limit − observed speed: mean **20.3 km/h**, std 9.6,
 range −8 to 66. It has genuine spread, so the synopsis's traffic objective is
 addressed by a reproducible derived feature rather than a paid API. It remains a
 **proxy** (tag D), and E3 will measure its contribution rather than assume it.
+
+## 6c. First physics-vs-reality comparison
+
+Road load integrated over the measured traces, using the assumed Leaf parameters and
+the measured HVAC load, against measured consumption on 480 segments:
+
+| | |
+|---|---|
+| measured Wh/km | median **146.3**, mean 159.0 |
+| physics-only Wh/km | median **129.6**, mean 138.3 |
+| **physics-only MAPE** | **22.5 %** |
+| mean bias | **−4.3 %** (physics under-predicts) |
+| correlation with measured | **r = +0.786** |
+
+**This is the project's first honest baseline number.** The archived synthetic
+`physics_only` figure was 11.3 % MAPE; on real data with uncalibrated parameters it
+is **22.5 %**, roughly twice as bad, which is what should have been expected.
+
+Median energy attribution per segment: **inertia 160 Wh**, roll 144, aero 94,
+aux 81, **grade 0.3**. Inertia dominating is physically right for short stop-go urban
+segments, and it is a term the original trip-level scaffold could only approximate
+from a stop count.
+
+The physics model under-predicts by ≈ 90 Wh on a 568 Wh median segment. That gap is
+the residual the hybrid's ML layer exists to learn, and it has plausible physical
+content: drivetrain efficiency below the assumed 0.89, auxiliary loads beyond HVAC,
+battery internal losses, and cold-temperature effects. Experiment E7 will try to
+absorb part of it into fitted parameters before any ML is involved.
+
+### Feature correlations with measured consumption (association only)
+
+| feature | r | note |
+|---|---|---|
+| `phys_wh_km` | **+0.786** | the physics prior carries most of the signal |
+| `aux_power_w` | **+0.661** | measured HVAC; a first-order effect |
+| `temp_c` | **−0.497** | colder costs more |
+| `stops_per_km` | +0.321 | |
+| `mean_speed_kmh` | −0.326 | faster segments are more efficient per km |
+| `speed_deficit_kmh` | +0.274 | the congestion proxy does carry signal |
+| `accel_pos_mean` | +0.163 | aggressiveness proxy, weak |
+| `elev_gain_m` | +0.099 | terrain is weak here (see 6b.1) |
+| `mean_grade_pct` | +0.085 | effectively dead, as predicted |
+| `distance_km` | −0.046 | no meaningful distance effect |
+
+These are **associations on observational data**, not causal effects, and several
+features are mutually confounded (temperature with HVAC use and with season).
 
 ## 7. Still to verify
 - Per-vehicle availability of HVAC channels for 541 (only 10 trips).

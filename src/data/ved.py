@@ -25,9 +25,10 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from ..config import DATA_DIR
+from ..config import DATA_DIR, VehicleSpec
 from ..evaluation.leakage_checks import attrition_row
 from ..evaluation.provenance import Provenance, tag
+from ..physics.road_load import trace_energy_wh
 
 # The three battery-electric vehicles, confirmed from VED_Static_Data_PHEV&EV.xlsx.
 # 541 is retained but contributes only ~10 trips, so it cannot support a
@@ -70,6 +71,12 @@ MIN_ROWS = 30
 MIN_DURATION_S = 60.0
 MIN_DISTANCE_KM = 0.5
 PLAUSIBLE_WH_PER_KM = (30.0, 600.0)   # generous; the literature band is ~120-250
+
+# VED does not observe payload or occupancy (limitation L5), so the mass used by the
+# physics baseline is an ASSUMPTION: kerb mass plus one nominal occupant. Vehicle mass
+# therefore carries an unquantified error of roughly +/-5%, and it is a known confound
+# rather than a measurement.
+NOMINAL_OCCUPANT_KG = 80.0
 
 
 def daynum_to_utc(daynum: pd.Series) -> pd.Series:
@@ -133,7 +140,7 @@ def parse_speed_limit(values) -> np.ndarray:
     return np.asarray(out, dtype=float)
 
 
-def _segment_row(d: pd.DataFrame) -> dict | None:
+def _segment_row(d: pd.DataFrame, vehicle: VehicleSpec) -> dict | None:
     """Collapse one (VehId, Trip) group into a single feature row.
 
     Returns None when the record cannot support an energy calculation.
@@ -210,6 +217,25 @@ def _segment_row(d: pd.DataFrame) -> dict | None:
                 speed_deficit_kmh=float(
                     np.nansum((lim[ok] - spd_kmh[ok]) * dt[ok]) / np.nansum(dt[ok])),
             )
+    # ---- physics baseline over the measured trace --------------------------
+    # This is the `phys_wh_km` the hybrid corrects. It integrates road load over the
+    # real speed trace, so acceleration is observed rather than inferred from a stop
+    # count, and it uses the MEASURED auxiliary load rather than a nominal constant.
+    grade_trace = (np.nan_to_num(d["Gradient"].to_numpy(float))
+                   if "Gradient" in d.columns else 0.0)
+    try:
+        phys = trace_energy_wh(
+            t_s, speed_ms, grade_trace,
+            mass_kg=vehicle.curb_mass_kg + NOMINAL_OCCUPANT_KG,
+            vehicle=vehicle,
+            temp_c=float(np.nanmedian(d["OAT[DegC]"])),
+            aux_power_w=np.nan_to_num(hvac) + vehicle.aux_power_w,
+        )
+        extra["phys_wh_km"] = phys["total_wh"] / distance_km
+        extra.update({f"phys_{k}": v for k, v in phys.items() if k != "total_wh"})
+    except ValueError:
+        extra["phys_wh_km"] = np.nan
+
     return dict(**extra, 
         vehicle_id=int(d["VehId"].iloc[0]),
         trip=int(d["Trip"].iloc[0]),
@@ -251,6 +277,8 @@ _SEGMENT_COLUMNS = (
     # present only when eVED enrichment is available
     "elev_gain_m", "elev_loss_m", "elev_span_m", "net_elev_m",
     "mean_grade_pct", "abs_grade_pct", "speed_limit_kmh", "speed_deficit_kmh",
+    "phys_wh_km", "phys_roll_wh", "phys_aero_wh", "phys_grade_wh",
+    "phys_inertia_wh", "phys_aux_wh",
 )
 
 
@@ -306,7 +334,9 @@ def derive_route_ids(segments: pd.DataFrame, eps_m: float = 500.0) -> pd.Series:
                      index=segments.index, name="route_id")
 
 
-def build_segment_table(raw: pd.DataFrame | None = None, *, eps_m: float = 500.0,
+def build_segment_table(raw: pd.DataFrame | None = None, *,
+                        vehicle: VehicleSpec | None = None,
+                        eps_m: float = 500.0,
                         vehicle_ids: tuple[int, ...] = BEV_VEHICLE_IDS,
                         ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Build the analysis-segment table and its attrition log.
@@ -314,11 +344,16 @@ def build_segment_table(raw: pd.DataFrame | None = None, *, eps_m: float = 500.0
     Returns (segments, attrition). Every exclusion is counted with a reason, because
     silently dropping awkward records is selection bias.
     """
+    from ..config import NISSAN_LEAF_2013
+
+    # VED's three BEVs are all 2013 Leafs, so that is the default -- but it is passed
+    # explicitly, never taken from a module-level global (Phase 0, item C1).
+    vehicle = NISSAN_LEAF_2013 if vehicle is None else vehicle
     raw = load_raw(vehicle_ids) if raw is None else raw
     groups = list(raw.groupby(["VehId", "Trip"], sort=True))
     log = [attrition_row("raw_trips", len(groups), len(groups), "all recorded trips")]
 
-    rows = [r for _, d in groups if (r := _segment_row(d)) is not None]
+    rows = [r for _, d in groups if (r := _segment_row(d, vehicle)) is not None]
     n_after_quality = len(rows)
     log.append(attrition_row("energy_computable", len(groups), n_after_quality,
                              f">={MIN_ROWS} rows, >={MIN_DURATION_S:.0f}s, "

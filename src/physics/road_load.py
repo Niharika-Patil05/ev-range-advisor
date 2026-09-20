@@ -73,3 +73,80 @@ def trip_energy_wh(segments: pd.DataFrame, **kwargs) -> float:
             segments["length_m"], segments["grade"], segments["speed_ms"], segments["stops"], **kwargs
         ).sum()
     )
+
+
+def trace_energy_wh(
+    time_s,
+    speed_ms,
+    grade=0.0,
+    *,
+    mass_kg: float,
+    vehicle: VehicleSpec,
+    temp_c: float = 25.0,
+    headwind_ms: float = 0.0,
+    aux_power_w=None,
+    crr_scale: float = 1.0,
+) -> dict:
+    """Road-load energy integrated over a measured speed trace.
+
+    `segment_energy_wh` above works on an idealised segment table with one average
+    speed per segment and a stop count. Real logged data is better than that: we have
+    the actual speed every second, so acceleration is observed rather than inferred
+    from a stop count, and the kinetic-energy term becomes exact instead of a
+    per-stop approximation.
+
+    Per interval, with v taken at the left endpoint and the real dt:
+
+        F_roll  = m g Crr cos(theta)
+        F_aero  = 0.5 rho Cd A v_rel |v_rel|        (v_rel = v + headwind)
+        F_grade = m g sin(theta)
+        F_inert = m a                               (a = dv/dt, signed)
+        P_wheel = (F_roll + F_aero + F_grade + F_inert) v
+
+    Battery energy is P_wheel/eta while tractive and P_wheel*regen_eff while the
+    wheel power is negative, which is what makes terrain cost energy even on a route
+    that returns to its starting altitude. Auxiliary load is added as measured.
+
+    Returns the total plus its components, because the split is what makes the
+    physics baseline interpretable in the app and in the report.
+    """
+    t = np.asarray(time_s, dtype=float)
+    v = np.asarray(speed_ms, dtype=float)
+    g = np.broadcast_to(np.asarray(grade, dtype=float), v.shape)
+
+    dt = np.diff(t)
+    if np.any(dt <= 0):
+        raise ValueError("time_s must be strictly increasing")
+
+    v0 = v[:-1]
+    accel = np.diff(v) / dt
+    theta = np.arctan(g[:-1])
+    rho = air_density(temp_c)
+
+    f_roll = mass_kg * G0 * vehicle.crr * crr_scale * np.cos(theta)
+    v_rel = v0 + headwind_ms
+    f_aero = 0.5 * rho * vehicle.cd * vehicle.frontal_area_m2 * v_rel * np.abs(v_rel)
+    f_grade = mass_kg * G0 * np.sin(theta)
+    f_inert = mass_kg * accel
+
+    # The drivetrain sees the NET force, so the split below is an attribution of the
+    # total rather than four independent energies; each component is converted with
+    # the efficiency branch that the net power was actually in.
+    p_wheel = (f_roll + f_aero + f_grade + f_inert) * v0
+    e_wheel = p_wheel * dt
+    tractive = e_wheel >= 0
+    conv = np.where(tractive, 1.0 / vehicle.drivetrain_eff, vehicle.regen_eff)
+
+    e_total = float(np.nansum(e_wheel * conv))
+    aux = (np.full_like(v0, vehicle.aux_power_w) if aux_power_w is None
+           else np.asarray(aux_power_w, dtype=float)[:len(v0)])
+    e_aux = float(np.nansum(aux * dt))
+
+    return dict(
+        total_wh=(e_total + e_aux) / 3600.0,
+        roll_wh=float(np.nansum(f_roll * v0 * dt * conv)) / 3600.0,
+        aero_wh=float(np.nansum(f_aero * v0 * dt * conv)) / 3600.0,
+        grade_wh=float(np.nansum(f_grade * v0 * dt * conv)) / 3600.0,
+        inertia_wh=float(np.nansum(f_inert * v0 * dt * conv)) / 3600.0,
+        aux_wh=e_aux / 3600.0,
+    )
