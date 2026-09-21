@@ -22,6 +22,7 @@ from scipy import stats
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from src.config import REPORTS_DIR  # noqa: E402
 from src.data.nasa import load_cycles  # noqa: E402
+from src.evaluation.harness import write_manifest  # noqa: E402
 from src.evaluation.provenance import ConclusionType, Evidence, Provenance  # noqa: E402
 
 MIN_CYCLES = 20
@@ -89,7 +90,7 @@ def main() -> None:
                   dict(parameter="charge_cap_factor", calibrated=False, value=np.nan,
                        note="no charge-limit variable in NASA PCoE"),
                   ]).to_csv(out / "calibration_summary.csv", index=False)
-    (out / "EVIDENCE.md").write_text(Evidence(
+    evidence = Evidence(
         experiment="E8 - degradation projection calibration",
         measured=["discharge capacity per cycle", "ambient temperature per cell"],
         derived=["SoH = capacity / robust reference capacity",
@@ -105,7 +106,14 @@ def main() -> None:
         known_confounds=["ageing protocol is confounded with ambient temperature group",
                          "cell-to-cell spread is 80 % of the mean fade rate",
                          "no DoD or charge-limit variable exists in this dataset"],
-    ).to_markdown())
+    )
+    write_manifest("E8_degradation_calibration",
+                   "Degradation-projection calibration against real NASA cells",
+                   out, evidence,
+                   config=dict(min_cycles=MIN_CYCLES),
+                   extra=dict(fade_per_cycle=mean, fade_sd=sd,
+                              temperature_factor_p_value=float(pv),
+                              temperature_factor_identifiable=bool(pv <= 0.05)))
     print(f"\nwrote {out}")
 
 

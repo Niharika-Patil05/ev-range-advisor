@@ -120,3 +120,34 @@ def test_advisor_no_longer_gives_uncalibrated_charging_advice():
     src = inspect.getsource(adv)
     assert "charge to 80" not in src.lower()
     assert "project_soh" not in src.split('"""')[0] + src  # not imported or called
+
+
+def test_every_experiment_directory_carries_a_manifest():
+    """The README promises every experiment writes a MANIFEST.json, and the evidence
+    panel discovers experiments by scanning for them. Three non-seed experiments
+    (a parameter fit, a propagation study, a calibration) previously wrote results
+    without one and were invisible in the app."""
+    from pathlib import Path
+
+    from src.config import REPORTS_DIR
+    missing = [d.name for d in Path(REPORTS_DIR).glob("E*/")
+               if d.is_dir() and not (d / "MANIFEST.json").exists()]
+    assert not missing, f"experiments without a manifest: {missing}"
+
+
+def test_write_manifest_records_provenance_and_refuses_bad_claims(tmp_path):
+    from src.evaluation.harness import write_manifest
+    from src.evaluation.provenance import (ConclusionType, Evidence, Provenance,
+                                           ProvenanceError)
+    ev = Evidence(experiment="E_x", provenance=Provenance.COUPLED_SIM,
+                  conclusion_type=ConclusionType.SIMULATED, n="10")
+    m = write_manifest("E_x", "d", tmp_path, ev)
+    assert m["provenance"] == "COUPLED-SIM"
+    assert (tmp_path / "MANIFEST.json").exists() and (tmp_path / "EVIDENCE.md").exists()
+
+    with pytest.raises(ProvenanceError):
+        write_manifest("E_y", "d", tmp_path,
+                       Evidence(experiment="E_y", provenance=Provenance.SYNTHETIC,
+                                conclusion_type=ConclusionType.SIMULATED, n="10")
+                       .__class__(experiment="E_y", provenance=Provenance.SYNTHETIC,
+                                  conclusion_type=ConclusionType.DEMONSTRATED, n="10"))

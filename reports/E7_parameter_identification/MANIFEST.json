@@ -1,0 +1,21 @@
+{
+  "experiment": "E7_parameter_identification",
+  "description": "Road-load parameter identification on real VED segments",
+  "timestamp_utc": "2026-09-21T06:39:20+00:00",
+  "git_revision": "69e71de-dirty",
+  "seeds": [],
+  "provenance": "REAL",
+  "conclusion_type": "DEMONSTRATED",
+  "split_protocol": "parameter fit, not a predictive evaluation; uncertainty from a route-level bootstrap (whole routes resampled, never rows)",
+  "n": "480 segments, 134 routes, 3 vehicles",
+  "python": "3.14.4",
+  "numpy": "2.5.3",
+  "pandas": "3.0.6",
+  "config": {
+    "cd_a_fixed": 0.6611999999999999,
+    "regen_eff": 0.55,
+    "occupant_kg": 80.0,
+    "n_boot": 200
+  },
+  "data_files": {}
+}

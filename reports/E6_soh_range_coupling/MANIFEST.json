@@ -1,0 +1,25 @@
+{
+  "experiment": "E6_soh_range_coupling",
+  "description": "SoH-to-range error propagation and variance decomposition",
+  "timestamp_utc": "2026-09-21T06:38:03+00:00",
+  "git_revision": "69e71de-dirty",
+  "seeds": [],
+  "provenance": "COUPLED-SIM",
+  "conclusion_type": "SIMULATED",
+  "split_protocol": "errors are out-of-fold: route-wise for consumption, leave-one-battery-out for SoH",
+  "n": "491 consumption errors, 2359 SoH errors",
+  "python": "3.14.4",
+  "numpy": "2.5.3",
+  "pandas": "3.0.6",
+  "config": {
+    "n_monte_carlo": 20000,
+    "derate_coef_range": [
+      0.003,
+      0.009
+    ]
+  },
+  "data_files": {},
+  "variance_share_consumption": 71.8662737844842,
+  "variance_share_soh": 26.202456195649212,
+  "variance_share_derate": 1.931270019866575
+}

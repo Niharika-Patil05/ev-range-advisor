@@ -1,0 +1,22 @@
+{
+  "experiment": "E8_degradation_calibration",
+  "description": "Degradation-projection calibration against real NASA cells",
+  "timestamp_utc": "2026-09-21T06:36:49+00:00",
+  "git_revision": "69e71de-dirty",
+  "seeds": [],
+  "provenance": "REAL",
+  "conclusion_type": "DEMONSTRATED",
+  "split_protocol": "none - this is a parameter fit; uncertainty from cell-to-cell spread",
+  "n": "26 cells, 2359 cycles",
+  "python": "3.14.4",
+  "numpy": "2.5.3",
+  "pandas": "3.0.6",
+  "config": {
+    "min_cycles": 20
+  },
+  "data_files": {},
+  "fade_per_cycle": 0.002216514973129978,
+  "fade_sd": 0.0017659175029070004,
+  "temperature_factor_p_value": 0.08744087163099426,
+  "temperature_factor_identifiable": false
+}

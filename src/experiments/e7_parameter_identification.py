@@ -19,6 +19,7 @@ from src.calibration.identify import (bootstrap_fit, fit, predict_energy_wh,  # 
                                       segment_basis)
 from src.config import NISSAN_LEAF_2013, REPORTS_DIR  # noqa: E402
 from src.data.ved import NOMINAL_OCCUPANT_KG, build_segment_table, load_raw  # noqa: E402
+from src.evaluation.harness import write_manifest  # noqa: E402
 from src.evaluation.provenance import ConclusionType, Evidence, Provenance  # noqa: E402
 
 
@@ -135,7 +136,11 @@ def main() -> None:
             "temperature co-occurs with HVAC use, low speed and winter driving",
         ],
     )
-    (out / "EVIDENCE.md").write_text(evidence.to_markdown())
+    write_manifest("E7_parameter_identification",
+                   "Road-load parameter identification on real VED segments",
+                   out, evidence,
+                   config=dict(cd_a_fixed=cd_a, regen_eff=vehicle.regen_eff,
+                               occupant_kg=NOMINAL_OCCUPANT_KG, n_boot=200))
     print(f"\nwrote {out}")
 
 

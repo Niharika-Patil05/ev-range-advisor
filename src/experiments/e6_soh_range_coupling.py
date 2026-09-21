@@ -35,6 +35,7 @@ from sklearn.ensemble import HistGradientBoostingRegressor
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from src.config import NISSAN_LEAF_2013, REPORTS_DIR  # noqa: E402
 from src.data.nasa import SOH_FEATURES, load_cycles  # noqa: E402
+from src.evaluation.harness import write_manifest  # noqa: E402
 from src.evaluation.provenance import (ConclusionType, Evidence,  # noqa: E402
                                        Provenance)
 from src.evaluation.splits import LeaveOneBatteryOut, RouteWise  # noqa: E402
@@ -130,7 +131,7 @@ def main() -> None:
     pd.DataFrame([dict(source=k, sd=float(np.sqrt(v)), share_pct=100 * v / total)
                   for k, v in parts.items()]).to_csv(out / "variance_decomposition.csv",
                                                      index=False)
-    (out / "EVIDENCE.md").write_text(Evidence(
+    evidence = Evidence(
         experiment="E6 - SoH to range propagation (RQ3)",
         measured=["VED pack current and voltage (consumption error)",
                   "NASA charge curves and discharge capacity (SoH error)"],
@@ -152,7 +153,14 @@ def main() -> None:
         known_confounds=["lab cells are not vehicle packs (no imbalance, BMS, gradients)",
                          "NASA cells are 2 Ah 18650s, the Leaf pack is 24 kWh",
                          "SoH error has a heavy tail: worst cell 13.9 pp in E5"],
-    ).to_markdown())
+    )
+    write_manifest("E6_soh_range_coupling",
+                   "SoH-to-range error propagation and variance decomposition",
+                   out, evidence,
+                   config=dict(n_monte_carlo=N_MC, derate_coef_range=list(DERATE_COEF_RANGE)),
+                   extra=dict(variance_share_consumption=100 * parts["consumption model"] / total,
+                              variance_share_soh=100 * parts["SoH estimation"] / total,
+                              variance_share_derate=100 * parts["temperature derate"] / total))
     print(f"\nwrote {out}")
 
 

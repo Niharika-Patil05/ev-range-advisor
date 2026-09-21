@@ -84,6 +84,44 @@ def summarise_across_seeds(per_seed: pd.DataFrame, index_cols: list[str]) -> pd.
     return out.reset_index()
 
 
+def write_manifest(exp_id: str, description: str, out_dir: str | Path,
+                   evidence: Evidence, *, seeds: tuple[int, ...] = (),
+                   config: dict | None = None,
+                   data_files: list[str | Path] | None = None,
+                   extra: dict | None = None) -> dict:
+    """Write the reproducibility record for an experiment.
+
+    `run_experiment` calls this for seed-based experiments. Experiments that are NOT
+    seed sweeps -- a parameter fit, a propagation study -- call it directly, so that
+    every result directory carries the same record. Without it they are invisible to
+    anything that discovers experiments by scanning for manifests, including the
+    app's evidence panel.
+    """
+    check_conclusion(evidence.provenance, evidence.conclusion_type)
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    manifest = {
+        "experiment": exp_id,
+        "description": description,
+        "timestamp_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "git_revision": git_revision(),
+        "seeds": list(seeds),
+        "provenance": evidence.provenance.value,
+        "conclusion_type": evidence.conclusion_type.value,
+        "split_protocol": evidence.split_protocol,
+        "n": evidence.n,
+        "python": platform.python_version(),
+        "numpy": np.__version__,
+        "pandas": pd.__version__,
+        "config": _jsonable(config or {}),
+        "data_files": {str(p): file_sha256(p) for p in (data_files or [])},
+        **(_jsonable(extra or {})),
+    }
+    (out / "MANIFEST.json").write_text(json.dumps(manifest, indent=2))
+    (out / "EVIDENCE.md").write_text(evidence.to_markdown())
+    return manifest
+
+
 def run_experiment(
     exp_id: str,
     description: str,
@@ -120,26 +158,11 @@ def run_experiment(
 
     per_seed.to_csv(out / "metrics_per_seed.csv", index=False)
     summary.to_csv(out / "metrics_summary.csv", index=False)
-    (out / "EVIDENCE.md").write_text(evidence.to_markdown())
 
-    manifest = {
-        "experiment": exp_id,
-        "description": description,
-        "timestamp_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "git_revision": git_revision(),
-        "seeds": list(seeds),
-        "n_rows_per_seed": int(len(per_seed) / max(len(seeds), 1)),
-        "provenance": evidence.provenance.value,
-        "conclusion_type": evidence.conclusion_type.value,
-        "split_protocol": evidence.split_protocol,
-        "n": evidence.n,
-        "python": platform.python_version(),
-        "numpy": np.__version__,
-        "pandas": pd.__version__,
-        "config": _jsonable(config or {}),
-        "data_files": {str(p): file_sha256(p) for p in (data_files or [])},
-    }
-    (out / "MANIFEST.json").write_text(json.dumps(manifest, indent=2))
+    manifest = write_manifest(
+        exp_id, description, out, evidence, seeds=seeds, config=config,
+        data_files=data_files,
+        extra={"n_rows_per_seed": int(len(per_seed) / max(len(seeds), 1))})
     log(f"[{exp_id}] wrote {out}")
     return {"per_seed": per_seed, "summary": summary, "manifest": manifest, "out_dir": out}
 
