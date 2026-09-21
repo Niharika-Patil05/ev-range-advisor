@@ -1,0 +1,31 @@
+{
+  "experiment": "E3_ablation",
+  "description": "Feature-group ablation on real BEV segments, route-wise",
+  "timestamp_utc": "2026-09-21T03:52:46+00:00",
+  "git_revision": "69ce5ff-dirty",
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "n_rows_per_seed": 30,
+  "provenance": "REAL",
+  "conclusion_type": "DEMONSTRATED",
+  "split_protocol": "L1 route-wise, 5 folds x 5 seeds",
+  "n": "480 segments, 134 routes, 2 usable vehicles",
+  "python": "3.14.4",
+  "numpy": "2.5.3",
+  "pandas": "3.0.6",
+  "config": {
+    "groups": [
+      "route",
+      "weather",
+      "state",
+      "traffic"
+    ],
+    "eps_m": 500.0
+  },
+  "data_files": {}
+}
