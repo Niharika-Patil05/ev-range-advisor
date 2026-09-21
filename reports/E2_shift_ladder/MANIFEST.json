@@ -1,8 +1,8 @@
 {
   "experiment": "E2_shift_ladder",
   "description": "Degradation of every model across four levels of distribution shift",
-  "timestamp_utc": "2026-09-20T19:47:23+00:00",
-  "git_revision": "9ced94e-dirty",
+  "timestamp_utc": "2026-09-21T05:38:46+00:00",
+  "git_revision": "fdd0015-dirty",
   "seeds": [
     0,
     1,

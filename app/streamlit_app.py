@@ -14,7 +14,7 @@ from app.panels import (PROVENANCE_BADGE, list_experiments, load_findings,
 from src.advisor.advisor import Advisor
 from src.config import E_SCOOTER_PLACEHOLDER, NISSAN_LEAF_2013
 from src.features.route_pipeline import PRESET_ROUTES, RoutePlanningError, load_preset, plan_route
-from src.models.coupling import project_soh
+from src.models.coupling import cycles_to_threshold, project_soh
 from src.models.soh_model import SOH_FEATURES
 from src.pipeline import load_or_train_system
 
@@ -126,19 +126,31 @@ with tab_trip:
 
 # ------------------------------------------------------------------ battery tab
 with tab_battery:
-    st.subheader("What-if: charging habits (indicative trends)")
-    a, b, c = st.columns(3)
-    cpw = a.slider("Charge cycles per week", 1, 14, 5)
-    dod = b.slider("Average depth of discharge", 0.2, 1.0, 0.7)
-    months = c.slider("Months to project", 6, 60, 24)
-    proj = pd.DataFrame({
-        "charge to 100 %": project_soh(soh, months, cpw, 100, dod, temp) * 100,
-        "charge to 80 %": project_soh(soh, months, cpw, 80, dod, temp) * 100,
-    })
-    proj.index.name = "month"
-    st.line_chart(proj)
-    st.caption("Semi-empirical model with placeholder constants; calibrate on lab-cell data before quoting numbers. "
-               "Lab cells are not vehicle packs.")
+    st.subheader("Projected battery health (lab cells)")
+    st.caption("Fade measured on 26 NASA lab cells (experiment E8), shown as a band "
+               "because the cell-to-cell spread is 80 % of the mean.")
+    n_cycles = st.slider("Lab cycles to project", 20, 400, 200, step=10)
+    proj = project_soh(soh, n_cycles).set_index("cycle") * 100
+    st.line_chart(proj[["pessimistic", "central", "optimistic"]])
+    eol = cycles_to_threshold(soh, 0.80)
+    if np.isfinite(eol["central"]):
+        st.metric("Lab cycles to 80 % SoH (central)", f"{eol['central']:.0f}",
+                  help=f"Band across cells: {eol['pessimistic']:.0f} to "
+                       f"{eol['optimistic']:.0f} cycles.")
+    st.error(
+        "**Read the x axis: these are LAB CYCLES, not months, and that is deliberate.**\n\n"
+        "These NASA cells are cycled at full depth of discharge and high rate, reaching "
+        "80 % SoH in roughly 90 cycles. A vehicle pack doing shallow partial cycles "
+        "typically takes on the order of a thousand. Extrapolating this rate over "
+        "calendar time — five charges a week for two years is 521 cycles — would "
+        "predict a dead pack in two years, which every real EV contradicts. The "
+        "equivalence factor between a lab cycle and a vehicle cycle is of order ten "
+        "and **nothing in this project measures it**, so no calendar forecast is offered.\n\n"
+        "**Charging-habit advice has been removed.** Earlier versions claimed that "
+        "limiting daily charge to 80 % preserves a specific number of SoH points. That "
+        "came from an invented constant. E8 found NASA PCoE records no charge-limit or "
+        "depth-of-discharge variable, and no temperature factor is identifiable either "
+        "(p = 0.087, with the sign the wrong way round for an Arrhenius law).")
 
     with st.expander("Estimate SoH from cycle measurements"):
         defaults = dict(ir_mohm=32.0, cc_time_min=90.0, v_window_min=21.0, ic_peak=1.5, temp_mean_c=30.0, temp_rise_c=4.0)

@@ -6,7 +6,7 @@ import pandas as pd
 
 from ..config import VehicleSpec
 from ..features.trip_features import DEFAULT_CONDITIONS, summarize_trip
-from ..models.coupling import project_soh, temp_derate, usable_energy_wh
+from ..models.coupling import temp_derate, usable_energy_wh
 
 
 class Advisor:
@@ -99,10 +99,10 @@ class Advisor:
             msgs.append(dict(level="warning", text=(
                 f"Battery health is {c['soh']*100:.0f} %, typically below the ~80 % end-of-life "
                 f"threshold. Plan a battery check or replacement.")))
-        s100 = project_soh(c["soh"], 12, charge_cap_pct=100, avg_temp_c=c["temp_c"])[-1]
-        s80 = project_soh(c["soh"], 12, charge_cap_pct=80, avg_temp_c=c["temp_c"])[-1]
-        if (s80 - s100) * 100 >= 0.3:
-            msgs.append(dict(level="info", text=(
-                f"Charging habit (indicative): limiting daily charge to 80 % could preserve roughly "
-                f"{(s80 - s100) * 100:.1f} percentage points of SoH over 12 months.")))
+        # The charging-habit advice that used to live here ("limiting daily charge
+        # to 80 % could preserve roughly X percentage points of SoH") has been
+        # REMOVED. It was computed from an invented charge-cap factor, and
+        # experiment E8 established that NASA PCoE records no charge-limit variable,
+        # so the claim could not be calibrated from any data this project holds. It
+        # was the only place where a placeholder produced user-facing advice.
         return msgs

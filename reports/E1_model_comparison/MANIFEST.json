@@ -1,8 +1,8 @@
 {
   "experiment": "E1_model_comparison",
   "description": "Six models under route-wise splitting on real VED segments",
-  "timestamp_utc": "2026-09-20T19:31:37+00:00",
-  "git_revision": "daf700b-dirty",
+  "timestamp_utc": "2026-09-21T05:32:51+00:00",
+  "git_revision": "fdd0015-dirty",
   "seeds": [
     0,
     1,

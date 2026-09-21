@@ -1,8 +1,8 @@
 {
   "experiment": "E_RQ2_uncertainty",
   "description": "Marginal vs conditional coverage of four interval methods",
-  "timestamp_utc": "2026-09-21T04:02:55+00:00",
-  "git_revision": "1a74d1c-dirty",
+  "timestamp_utc": "2026-09-21T05:41:32+00:00",
+  "git_revision": "fdd0015-dirty",
   "seeds": [
     0,
     1,

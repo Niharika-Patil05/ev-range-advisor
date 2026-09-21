@@ -1,0 +1,5 @@
+parameter,calibrated,value,sd,p10,p90,n_cells,note
+base_fade_per_cycle,True,0.002216514973129978,0.0017659175029070004,0.0005704445540281435,0.0034567427730796594,26.0,
+temperature_factor,False,,,,,,"p=0.087, not significant, wrong sign"
+dod_factor,False,,,,,,no depth-of-discharge variable in NASA PCoE
+charge_cap_factor,False,,,,,,no charge-limit variable in NASA PCoE
