@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 
 from ..config import VehicleSpec
+from ..features.route_to_features import route_to_features
 from ..features.trip_features import DEFAULT_CONDITIONS, summarize_trip
 from ..models.coupling import temp_derate, usable_energy_wh
 
@@ -16,11 +17,22 @@ class Advisor:
         self.hybrid = system["hybrid"]
         self.conformal = system["conformal"]
         self.vehicle = vehicle
+        self.meta = system.get("meta", {})
+        # A system trained on real segments carries its feature list; the legacy
+        # synthetic system does not. The feature schemas differ, so the row builder
+        # is chosen from the artefact rather than assumed.
+        self.features = system.get("features")
+        self.is_real = self.meta.get("data") == "REAL"
+
+    def _feature_row(self, segments: pd.DataFrame, c: dict) -> dict:
+        if self.features is not None:
+            return route_to_features(segments, c, self.vehicle)
+        return summarize_trip(segments, c, self.vehicle)
 
     # ------------------------------------------------------------------ prediction
     def predict(self, segments: pd.DataFrame, cond: dict) -> dict:
         c = {**DEFAULT_CONDITIONS, **cond}
-        feats = summarize_trip(segments, c, self.vehicle)
+        feats = self._feature_row(segments, c)
         wh_km = float(self.hybrid.predict(pd.DataFrame([feats]))[0])
         lo, hi = (float(x[0]) for x in self.conformal.interval(np.array([wh_km])))
         usable = float(usable_energy_wh(c["soc_start"], c["soh"], c["temp_c"], self.vehicle))
@@ -42,22 +54,36 @@ class Advisor:
         c = {**DEFAULT_CONDITIONS, **cond}
         base = self.predict(segments, c)["range_km"]
         cases = []
-        if c["headwind_ms"] > 0.5:
-            cases.append(("Headwind", segments, {**c, "headwind_ms": 0.0}))
-        if c["temp_c"] < 15:
-            cases.append(("Cold weather", segments, {**c, "temp_c": 25.0}))
-        if c["rain"]:
-            cases.append(("Rain / wet road", segments, {**c, "rain": 0}))
-        if c["aux_on"]:
-            cases.append(("High auxiliary load", segments, {**c, "aux_on": 0}))
-        if c["style"] > 0:
-            cases.append(("Riding style (vs. eco)", segments, {**c, "style": 0}))
-        if c["soh"] < 0.98:
-            cases.append(("Battery ageing (SoH)", segments, {**c, "soh": 1.0}))
-        if c["load_kg"] > 80:
-            cases.append(("Extra load (above 80 kg)", segments, {**c, "load_kg": 80.0}))
-        if (segments["length_m"] * segments["grade"].abs()).sum() > 50:
-            cases.append(("Hills / gradient", segments.assign(grade=0.0), c))
+        if self.features is not None:
+            # Real-data schema: the counterfactuals are over the quantities this
+            # model actually consumes.
+            if c.get("aux_power_w", 0.0) > 10:
+                cases.append(("Heating / cooling", segments, {**c, "aux_power_w": 0.0}))
+            if c["temp_c"] < 15:
+                cases.append(("Cold weather", segments, {**c, "temp_c": 25.0}))
+            if c["soh"] < 0.98:
+                cases.append(("Battery ageing (SoH)", segments, {**c, "soh": 1.0}))
+            if (segments["length_m"] * segments["grade"].abs()).sum() > 50:
+                cases.append(("Hills / gradient", segments.assign(grade=0.0), c))
+            if "stops" in segments and segments["stops"].sum() > 0:
+                cases.append(("Stop-start traffic", segments.assign(stops=0.0), c))
+        else:
+            if c["headwind_ms"] > 0.5:
+                cases.append(("Headwind", segments, {**c, "headwind_ms": 0.0}))
+            if c["temp_c"] < 15:
+                cases.append(("Cold weather", segments, {**c, "temp_c": 25.0}))
+            if c["rain"]:
+                cases.append(("Rain / wet road", segments, {**c, "rain": 0}))
+            if c["aux_on"]:
+                cases.append(("High auxiliary load", segments, {**c, "aux_on": 0}))
+            if c["style"] > 0:
+                cases.append(("Riding style (vs. eco)", segments, {**c, "style": 0}))
+            if c["soh"] < 0.98:
+                cases.append(("Battery ageing (SoH)", segments, {**c, "soh": 1.0}))
+            if c["load_kg"] > 80:
+                cases.append(("Extra load (above 80 kg)", segments, {**c, "load_kg": 80.0}))
+            if (segments["length_m"] * segments["grade"].abs()).sum() > 50:
+                cases.append(("Hills / gradient", segments.assign(grade=0.0), c))
         out = []
         for label, seg, cc in cases:
             gain = self.predict(seg, cc)["range_km"] - base
@@ -84,7 +110,13 @@ class Advisor:
                 f"Comfortable: even the pessimistic range ({p['range_lo_km']:.0f} km) covers the "
                 f"{d:.0f} km trip. Expected battery at arrival: {p['soc_end_pct']:.0f} %.")))
 
-        if p["range_lo_km"] < d * 1.15 and c["style"] > 0:
+        if p["range_lo_km"] < d * 1.15 and c.get("aux_power_w", 0.0) > 10:
+            alt = self.predict(segments, {**c, "aux_power_w": 0.0})
+            gain = alt["range_km"] - p["range_km"]
+            if gain >= 0.5:
+                msgs.append(dict(level="info", text=(
+                    f"Turning off heating or cooling would add about {gain:.0f} km.")))
+        if p["range_lo_km"] < d * 1.15 and c.get("style", 0) > 0:
             alt = self.predict(segments, {**c, "style": 0})
             gain = alt["range_km"] - p["range_km"]
             if gain >= 0.5:

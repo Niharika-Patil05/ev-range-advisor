@@ -44,3 +44,18 @@ def features_without(*groups: str) -> list[str]:
     drop = set(groups)
     return [f for g, feats in FEATURE_GROUPS.items()
             if g not in drop and g != "physics" for f in feats]
+
+
+# Features a route planner can supply BEFORE the trip happens. The three excluded
+# here -- accel_pos_mean, speed_limit_kmh, speed_deficit_kmh -- require the trip to
+# have already been driven, or a map service the app does not call at plan time.
+#
+# Restricting to this subset costs the hybrid nothing measurable: 13.48 % MAPE
+# against 13.57 % on the full set (3 seeds, route-wise), which is within noise and
+# consistent with E3 finding those three features contributed little.
+DEPLOYABLE_FEATURES = [
+    "distance_km", "mean_speed_kmh", "speed_std_kmh", "stops_per_km",
+    "elev_gain_m", "elev_loss_m", "net_elev_m", "abs_grade_pct",
+    "temp_c", "aux_power_w", "hvac_on", "soc_start",
+]
+DEPLOYABLE_WITH_PHYSICS = DEPLOYABLE_FEATURES + ["phys_wh_km"]

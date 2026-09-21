@@ -23,6 +23,7 @@ TARGET = "wh_per_km"
 DEFAULT_CONDITIONS = dict(
     temp_c=30.0, headwind_ms=0.0, rain=0, load_kg=75.0,
     soc_start=100.0, soh=1.0, aux_on=0, style=1,
+    aux_power_w=0.0,        # measured HVAC draw, used by the real-data schema
 )
 
 

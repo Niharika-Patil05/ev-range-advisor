@@ -158,6 +158,22 @@ def train_all(vehicle: VehicleSpec, n_routes: int = 60, trips_per_route: int = 2
     return results
 
 
+def load_serving_system(vehicle: VehicleSpec, models_dir: Path = MODELS_DIR) -> dict:
+    """The system the app should serve: the REAL-data model if it exists.
+
+    Falls back to the synthetic one so the app still runs on a machine that has not
+    downloaded ~9 GB of data -- but the artefact carries meta["data"], and the
+    interface must say which it is showing. The headline results in reports/ are
+    real, and a viewer must never be left to assume the demo is producing them.
+    """
+    real = Path(models_dir) / "system_real.joblib"
+    if real.exists():
+        system = joblib.load(real)
+        if system.get("meta", {}).get("vehicle") == vehicle.name:
+            return system
+    return load_or_train_system(vehicle, models_dir)
+
+
 def load_or_train_system(vehicle: VehicleSpec, models_dir: Path = MODELS_DIR) -> dict:
     """Load the saved artefacts, or train a small system if none exist.
 

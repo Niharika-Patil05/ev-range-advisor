@@ -16,7 +16,7 @@ from src.config import E_SCOOTER_PLACEHOLDER, NISSAN_LEAF_2013
 from src.features.route_pipeline import PRESET_ROUTES, RoutePlanningError, load_preset, plan_route
 from src.models.coupling import cycles_to_threshold, project_soh
 from src.models.soh_model import SOH_FEATURES
-from src.pipeline import load_or_train_system
+from src.pipeline import load_serving_system
 
 st.set_page_config(page_title="EV Range & Battery Advisor", page_icon="🔋", layout="wide")
 
@@ -30,9 +30,9 @@ VEHICLES = {
 }
 
 
-@st.cache_resource(show_spinner="Loading models (the first run trains them on synthetic data)...")
+@st.cache_resource(show_spinner="Loading models...")
 def get_system(_vehicle):
-    return load_or_train_system(_vehicle)
+    return load_serving_system(_vehicle)
 
 
 with st.sidebar:
@@ -43,10 +43,27 @@ system = get_system(vehicle)
 advisor = Advisor(system, vehicle)
 
 st.title("🔋 Route-aware EV Range & Battery Health Advisor")
-st.caption(f"Vehicle: {vehicle.name}  |  Model data: {system['meta']['data']}")
-if system["meta"]["data"] == "SYNTHETIC":
-    st.warning("Models are currently trained on SYNTHETIC data. Numbers demonstrate the workflow, "
-               "not real-world accuracy. Replace with real data (see README).")
+_meta = system.get("meta", {})
+st.caption(f"Vehicle: {vehicle.name}  |  Model data: {_meta.get('data', '?')}")
+if _meta.get("data") == "REAL":
+    st.success(
+        f"✅ **Serving a model trained on REAL logged vehicle data.** "
+        f"{_meta.get('n_segments', '?')} analysis segments from "
+        f"{_meta.get('n_vehicles', '?')} vehicles ({_meta.get('source', '')}). "
+        f"Measured accuracy on **unseen routes**: "
+        f"**{_meta.get('holdout_MAPE', float('nan')):.1f} % MAPE** "
+        f"({_meta.get('holdout_MAE', float('nan')):.0f} Wh/km MAE). "
+        f"Battery model: {_meta.get('soh_cells', '?')} real cells, "
+        f"{_meta.get('soh_lobo_MAE_pp', float('nan')):.1f} pp leave-one-battery-out error.")
+    st.caption(
+        "The route you plan here is not one of those segments, and the planner cannot "
+        "know the acceleration profile you will actually drive, so treat the number as "
+        "an estimate carrying at least the measured error above.")
+else:
+    st.warning(
+        "⚠️ **Serving the SYNTHETIC model** — no real-data artefact was found. These "
+        "numbers demonstrate the workflow and are NOT the results reported in "
+        "`reports/`. Run `python scripts/train_real_system.py` after fetching the data.")
 
 # ------------------------------------------------------------------ sidebar inputs
 with st.sidebar:
@@ -78,13 +95,21 @@ with st.sidebar:
     soh = st.slider("Battery health, SoH (%)", 60, 100, 90) / 100
     load = st.slider("Rider + load (kg)", 40, 180, 80)
     style = st.select_slider("Riding style", ["eco", "normal", "sporty"], "normal")
-    aux = st.checkbox("High auxiliary load (lights, accessories)")
+    if system.get("meta", {}).get("data") == "REAL":
+        aux_w = st.slider("Heating / cooling power (W)", 0, 4000, 0, step=100,
+                          help="Measured HVAC draw. E3 found this the strongest single "
+                               "feature after route geometry.")
+        aux = aux_w > 10
+    else:
+        aux = st.checkbox("High auxiliary load (lights, accessories)")
+        aux_w = 0.0
     temp = st.slider("Temperature (°C)", 0, 45, int(round(weather.get("temp_c", 30))))
     wind = st.slider("Headwind (m/s, negative = tailwind)", -8.0, 8.0, float(round(weather.get("headwind_ms", 0.0), 1)))
     rain = st.checkbox("Rain / wet road", bool(weather.get("rain", 0)))
 
 cond = dict(soc_start=soc, soh=soh, load_kg=load, style=["eco", "normal", "sporty"].index(style),
-            aux_on=int(aux), temp_c=temp, headwind_ms=wind, rain=int(rain))
+            aux_on=int(aux), aux_power_w=float(aux_w), temp_c=temp,
+            headwind_ms=wind, rain=int(rain))
 
 tab_trip, tab_battery, tab_evidence, tab_sens = st.tabs(
     ["Trip advisor", "Battery health", "Evidence", "Sensitivity"])
