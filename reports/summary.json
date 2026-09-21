@@ -1,0 +1,9 @@
+{
+  "data": "SYNTHETIC - proves the pipeline works, not real-world accuracy",
+  "vehicle": "2013 Nissan Leaf (24 kWh) - VED primary vehicle",
+  "best_range_model": "hybrid_physics_ml",
+  "hybrid_MAPE": 3.187472376024774,
+  "conformal_coverage": 0.9611111111111111,
+  "soh_best": "random_forest",
+  "soh_best_MAE_pp": 1.1135633920707326
+}

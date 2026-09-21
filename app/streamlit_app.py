@@ -8,6 +8,9 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
+from app.panels import (PROVENANCE_BADGE, list_experiments, load_findings,
+                        load_summary, soh_sensitivity_curve,
+                        temperature_sensitivity_curve)
 from src.advisor.advisor import Advisor
 from src.config import E_SCOOTER_PLACEHOLDER, NISSAN_LEAF_2013
 from src.features.route_pipeline import PRESET_ROUTES, RoutePlanningError, load_preset, plan_route
@@ -83,7 +86,8 @@ with st.sidebar:
 cond = dict(soc_start=soc, soh=soh, load_kg=load, style=["eco", "normal", "sporty"].index(style),
             aux_on=int(aux), temp_c=temp, headwind_ms=wind, rain=int(rain))
 
-tab_trip, tab_battery = st.tabs(["Trip advisor", "Battery health"])
+tab_trip, tab_battery, tab_evidence, tab_sens = st.tabs(
+    ["Trip advisor", "Battery health", "Evidence", "Sensitivity"])
 
 # ------------------------------------------------------------------ trip tab
 with tab_trip:
@@ -143,3 +147,72 @@ with tab_battery:
         if st.button("Estimate SoH"):
             est = float(system["soh_model"].predict(pd.DataFrame([vals])[SOH_FEATURES])[0])
             st.success(f"Estimated SoH: {est*100:.1f} %  (set the sidebar slider to use it)")
+
+
+# ------------------------------------------------------------------ evidence tab
+with tab_evidence:
+    st.subheader("What has actually been measured")
+    st.caption("Rendered live from reports/. Every experiment writes a MANIFEST.json "
+               "recording its seeds, split protocol and code revision, and an "
+               "EVIDENCE.md stating what was measured, derived, external, simulated "
+               "and assumed.")
+
+    exps = list_experiments()
+    if exps.empty:
+        st.info("No experiment reports found. Run e.g. "
+                "`python -m src.experiments.e1_model_comparison`.")
+    else:
+        for tag, (icon, meaning) in PROVENANCE_BADGE.items():
+            if (exps.provenance == tag).any():
+                st.markdown(f"{icon} **{tag}** — {meaning}")
+        st.dataframe(exps[["experiment", "provenance", "conclusion", "protocol",
+                           "n", "seeds"]], width='stretch', hide_index=True)
+
+        chosen = st.selectbox("Experiment", sorted(Path(e).name for e in exps.path))
+        summary = load_summary(chosen)
+        if summary is not None:
+            cols = [c for c in summary.columns if c.endswith(("_mean", "_std"))
+                    or not c.endswith("_count")]
+            st.dataframe(summary[cols].round(3), width='stretch', hide_index=True)
+        findings = load_findings(chosen)
+        if findings:
+            with st.expander("Findings, including what was refuted", expanded=False):
+                st.markdown(findings)
+
+    scorecard = Path("reports/HYPOTHESIS_SCORECARD.md")
+    if scorecard.exists():
+        with st.expander("Pre-registration scorecard (15 hypotheses, 6 refuted)"):
+            st.markdown(scorecard.read_text())
+
+# ------------------------------------------------------------------ sensitivity tab
+with tab_sens:
+    st.subheader("What-if: how much does each factor move the range?")
+    p_now = advisor.predict(segments, cond) if segments is not None else None
+    cons = (p_now["wh_per_km"] if p_now else 146.3)
+    st.caption(f"Using {cons:.0f} Wh/km"
+               + (" from the current route." if p_now else
+                  " (median measured on real VED segments) — pick a route for your own."))
+
+    st.markdown("#### Range against battery health")
+    st.markdown("🔶 **COUPLED-SIM** — " + PROVENANCE_BADGE["COUPLED-SIM"][1])
+    curve = soh_sensitivity_curve(vehicle, cons, soc, temp)
+    st.line_chart(curve.set_index("soh_pct")["range_km"])
+    slope = float(curve.km_per_pp.mean())
+    st.metric("Range lost per percentage point of SoH", f"{slope:.2f} km")
+    st.caption(
+        f"Experiment E6 measured {slope:.2f} km per point at this state of charge, and "
+        f"found it stable across the 80–100 % band. It halves when the battery is half "
+        f"full, because range is proportional to usable energy. E6 also found that the "
+        f"**consumption model contributes 71.9 % of range-prediction variance against "
+        f"26.2 % for SoH estimation** — improving consumption prediction matters about "
+        f"three times more.")
+
+    st.markdown("#### Range against temperature (capacity derate only)")
+    tcurve = temperature_sensitivity_curve(vehicle, cons, soc, soh)
+    st.line_chart(tcurve.set_index("temp_c")["range_km"])
+    st.warning(
+        "This shows the **capacity derate term alone**, whose coefficient is still a "
+        "placeholder. It does NOT include temperature's effect on consumption itself, "
+        "which the real data says is the larger channel: E6 attributes only 1.9 % of "
+        "range variance to the derate, while E3 measured temperature and the measured "
+        "HVAC load it drives as the two strongest single features after route geometry.")

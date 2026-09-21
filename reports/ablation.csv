@@ -1,0 +1,6 @@
+variant,gbm_CV_MAPE,hybrid_CV_MAPE
+full,9.16533737454609,3.237301433809588
+without route features,27.529308233661716,3.2707103514828857
+without weather features,11.647960531920388,5.142318392115921
+"without vehicle state (SoH, load, aux, style)",22.515166403222263,3.9101353168102664
+physics baseline only (no ML),,11.527755317515126
