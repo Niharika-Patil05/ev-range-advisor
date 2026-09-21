@@ -1,0 +1,26 @@
+{
+  "experiment": "E4_cross_vehicle",
+  "description": "L3c leave-one-vehicle-out within the PHEV fleet",
+  "timestamp_utc": "2026-09-21T03:39:40+00:00",
+  "git_revision": "946dcfc-dirty",
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "n_rows_per_seed": 12,
+  "provenance": "REAL",
+  "conclusion_type": "DEMONSTRATED",
+  "split_protocol": "L3c leave-one-vehicle-out, vehicle AND route disjoint, >= 30 segments per vehicle, 5 seeds",
+  "n": "1764 PHEV-electric segments, 12 vehicles",
+  "python": "3.14.4",
+  "numpy": "2.5.3",
+  "pandas": "3.0.6",
+  "config": {
+    "min_segments_per_vehicle": 30,
+    "eps_m": 500.0
+  },
+  "data_files": {}
+}

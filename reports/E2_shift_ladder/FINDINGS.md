@@ -88,6 +88,21 @@ accuracy-only comparison would have hidden completely.
   shift, not a clean temperature manipulation.
 - All associations, no causation. One vehicle model, one city, one year.
 
+## ⚠️ SUPERSEDED IN PART BY E4
+
+The conclusion above — that `physics_only` wins under vehicle shift — **was an
+artefact of data scarcity, not of vehicle shift.** The vehicle-455 fold trained on
+only 139 segments, and this document already flagged that the two explanations were
+not separable here.
+
+E4 separated them. Using 1,897 PHEV electric-mode segments across 23 vehicles,
+leave-one-vehicle-out with ample training data gives the **hybrid 15.99 %** against
+**physics_only 26.73 %**. With enough data, learning wins under genuine vehicle shift.
+
+The correct statement is therefore: **the learned residual's value is conditional on
+training-data volume, not on vehicle identity.** The text above is left unchanged as
+the record of what E2 alone could support.
+
 ## What changed in the plan
 
 `physics_only` is promoted from "floor baseline" to **the most shift-robust model

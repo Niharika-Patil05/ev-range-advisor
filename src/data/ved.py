@@ -50,6 +50,10 @@ ENRICHED_COLUMNS = [
     "Speed Limit[km/h]", "Match Type",
 ]
 
+# Engine RPM is required to identify PHEV electric-mode segments. It is 0% available
+# for BEVs, so it is requested only when needed (see PHEV_COLUMNS).
+PHEV_COLUMNS = ["Engine RPM[RPM]"]
+
 NEEDED_COLUMNS = [
     "DayNum", "VehId", "Trip", "Timestamp(ms)",
     "Latitude[deg]", "Longitude[deg]", "Vehicle Speed[km/h]",
@@ -77,6 +81,66 @@ PLAUSIBLE_WH_PER_KM = (30.0, 600.0)   # generous; the literature band is ~120-25
 # therefore carries an unquantified error of roughly +/-5%, and it is a known confound
 # rather than a measurement.
 NOMINAL_OCCUPANT_KG = 80.0
+LB_TO_KG = 0.45359237
+
+# PHEVs in charge-depleting (engine-off) operation are, physically, battery-electric
+# vehicles: the same road load, the same pack energy from V*I. They are used for the
+# L4 cross-vehicle-model transfer that replaced the dropped ZTBus experiment, raising
+# the vehicle count from 2 usable BEVs to roughly 27.
+#
+# The filter must be Engine RPM, not Fuel Rate: fuel rate is 0% available for BEVs and
+# only 50% for PHEVs, while RPM is 100% available for PHEVs
+# (docs/PHASE0_VERIFICATION.md section A6).
+ENGINE_ON_RPM = 50.0        # above idle noise
+ENGINE_GUARD_S = 30.0       # exclude a segment if the engine ran within this window
+
+
+def load_static() -> pd.DataFrame:
+    """VED's static vehicle table for PHEVs and EVs, with mass in kg.
+
+    `Generalized_Weight` is BINNED by the dataset authors (3000/3500/4000 lb), so the
+    mass it yields is an assumption with roughly +/-5% error, not a measurement.
+    """
+    x = pd.read_excel(RAW_DIR / "VED_Static_Data_PHEV&EV.xlsx")
+    x = x.rename(columns={"VehId": "vehicle_id"})
+    x["vehicle_id"] = x["vehicle_id"].astype(int)
+    x["mass_kg"] = x["Generalized_Weight"].astype(float) * LB_TO_KG
+    # Engine displacement stands in for "vehicle model", which VED does not name.
+    # It is a proxy: two different models could share a displacement.
+    x["vehicle_model"] = (x["Engine Configuration & Displacement"].astype(str)
+                          .str.extract(r"([0-9]\.[0-9])L")[0].fillna("EV"))
+    return x[["vehicle_id", "EngineType", "vehicle_model", "mass_kg"]]
+
+
+def phev_vehicle_ids() -> tuple[int, ...]:
+    st = load_static()
+    return tuple(st.loc[st.EngineType == "PHEV", "vehicle_id"])
+
+
+def electric_mode_mask(d: pd.DataFrame) -> bool:
+    """True if this PHEV segment ran engine-off throughout, with a guard band.
+
+    A segment is rejected if the engine was above idle at any point, or if any
+    sample lies within ENGINE_GUARD_S of one that was: a just-stopped engine is
+    still warm and still contributing.
+    """
+    if "Engine RPM[RPM]" not in d.columns:
+        # Returning False here would silently reject every segment, which is how this
+        # filter first failed: load_raw does not request Engine RPM by default, so the
+        # whole PHEV fleet vanished with an attrition line reading 100%.
+        raise KeyError(
+            "electric_mode_mask needs 'Engine RPM[RPM]'. Pass it in load_raw(columns=...); "
+            "the default NEEDED_COLUMNS omits it because BEVs never have it."
+        )
+    rpm = d["Engine RPM[RPM]"].to_numpy(float)
+    if np.isnan(rpm).all():
+        return False
+    on = np.nan_to_num(rpm) > ENGINE_ON_RPM
+    if not on.any():
+        return True
+    t = d["Timestamp(ms)"].to_numpy(float) / 1000.0
+    on_times = t[on]
+    return not np.any(np.min(np.abs(t[:, None] - on_times[None, :]), axis=1) <= ENGINE_GUARD_S)
 
 
 def daynum_to_utc(daynum: pd.Series) -> pd.Series:
@@ -140,7 +204,8 @@ def parse_speed_limit(values) -> np.ndarray:
     return np.asarray(out, dtype=float)
 
 
-def _segment_row(d: pd.DataFrame, vehicle: VehicleSpec) -> dict | None:
+def _segment_row(d: pd.DataFrame, vehicle: VehicleSpec,
+                 mass_kg: float | None = None) -> dict | None:
     """Collapse one (VehId, Trip) group into a single feature row.
 
     Returns None when the record cannot support an energy calculation.
@@ -171,8 +236,19 @@ def _segment_row(d: pd.DataFrame, vehicle: VehicleSpec) -> dict | None:
 
     moving = speed_ms[:-1] > 0.5
     stops = int(np.sum(np.diff(moving.astype(int)) == -1))
-    hvac = (d["Heater Power[Watts]"].to_numpy(float)
-            + d["Air Conditioning Power[Watts]"].to_numpy(float))[:-1]
+    # HVAC: sum the two channels treating a MISSING channel as zero draw.
+    # Plain addition would be wrong -- NaN + number = NaN, which silently voids the
+    # whole feature whenever one channel is absent. Both channels are 100% available
+    # for the BEVs, so this only bites on other powertrains: for PHEVs, A/C is 72%
+    # available and the heater only 12%.
+    # The assumption "missing channel == no draw" is NOT free: it understates heating
+    # in winter wherever the heater channel is absent. `hvac_coverage` records how much
+    # of the segment had any HVAC channel at all, so a model or a reader can tell the
+    # difference between "measured zero" and "not measured".
+    heater = d["Heater Power[Watts]"].to_numpy(float)
+    ac = d["Air Conditioning Power[Watts]"].to_numpy(float)
+    hvac_observed = (~np.isnan(heater)) | (~np.isnan(ac))
+    hvac = (np.nan_to_num(heater) + np.nan_to_num(ac))[:-1]
 
     lat, lon = d["Latitude[deg]"].to_numpy(float), d["Longitude[deg]"].to_numpy(float)
     gps_km = float(np.nansum(haversine_m(lat[:-1], lon[:-1], lat[1:], lon[1:])) / 1000.0)
@@ -226,7 +302,8 @@ def _segment_row(d: pd.DataFrame, vehicle: VehicleSpec) -> dict | None:
     try:
         phys = trace_energy_wh(
             t_s, speed_ms, grade_trace,
-            mass_kg=vehicle.curb_mass_kg + NOMINAL_OCCUPANT_KG,
+            mass_kg=(mass_kg if mass_kg is not None
+                     else vehicle.curb_mass_kg) + NOMINAL_OCCUPANT_KG,
             vehicle=vehicle,
             temp_c=float(np.nanmedian(d["OAT[DegC]"])),
             aux_power_w=np.nan_to_num(hvac) + vehicle.aux_power_w,
@@ -257,7 +334,8 @@ def _segment_row(d: pd.DataFrame, vehicle: VehicleSpec) -> dict | None:
         accel_pos_mean=float(np.nanmean(np.clip(np.diff(speed_ms) / np.maximum(dt, 0.1), 0, None))),
         temp_c=float(np.nanmedian(d["OAT[DegC]"])),           # MEASURED onboard
         aux_power_w=float(np.nanmean(hvac)),                   # MEASURED HVAC load
-        hvac_on=float(np.nanmean(hvac > 10.0)),
+        hvac_on=float(np.mean(hvac > 10.0)),
+        hvac_coverage=float(np.mean(hvac_observed)),
         soc_start=float(soc[0]),
         soc_end=float(soc[-1]),
         soc_drop_pp=float(soc[0] - soc[-1]),
@@ -272,7 +350,7 @@ _SEGMENT_COLUMNS = (
     "gps_distance_km", "energy_wh", "gross_discharge_wh", "regen_wh",
     "regen_fraction", "wh_per_km", "mean_speed_kmh", "speed_std_kmh",
     "stops_per_km", "accel_pos_mean", "temp_c", "aux_power_w", "hvac_on",
-    "soc_start", "soc_end", "soc_drop_pp",
+    "hvac_coverage", "soc_start", "soc_end", "soc_drop_pp",
     "lat_start", "lon_start", "lat_end", "lon_end",
     # present only when eVED enrichment is available
     "elev_gain_m", "elev_loss_m", "elev_span_m", "net_elev_m",
@@ -338,6 +416,8 @@ def build_segment_table(raw: pd.DataFrame | None = None, *,
                         vehicle: VehicleSpec | None = None,
                         eps_m: float = 500.0,
                         vehicle_ids: tuple[int, ...] = BEV_VEHICLE_IDS,
+                        mass_by_vehicle: dict[int, float] | None = None,
+                        electric_mode_only: bool = False,
                         ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Build the analysis-segment table and its attrition log.
 
@@ -353,7 +433,16 @@ def build_segment_table(raw: pd.DataFrame | None = None, *,
     groups = list(raw.groupby(["VehId", "Trip"], sort=True))
     log = [attrition_row("raw_trips", len(groups), len(groups), "all recorded trips")]
 
-    rows = [r for _, d in groups if (r := _segment_row(d, vehicle)) is not None]
+    if electric_mode_only:
+        before = len(groups)
+        groups = [(k, d) for k, d in groups if electric_mode_mask(d)]
+        log.append(attrition_row("electric_mode_only", before, len(groups),
+                                 f"engine above {ENGINE_ON_RPM:.0f} rpm at any point, "
+                                 f"or within {ENGINE_GUARD_S:.0f}s of doing so"))
+
+    rows = [r for (vid, _), d in groups
+            if (r := _segment_row(d, vehicle,
+                                  mass_kg=(mass_by_vehicle or {}).get(int(vid)))) is not None]
     n_after_quality = len(rows)
     log.append(attrition_row("energy_computable", len(groups), n_after_quality,
                              f">={MIN_ROWS} rows, >={MIN_DURATION_S:.0f}s, "

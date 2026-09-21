@@ -203,3 +203,42 @@ def test_enrichment_columns_are_optional():
     seg, _ = build_segment_table(fake_trip())
     assert len(seg) == 1
     assert "elev_gain_m" not in seg.columns or pd.isna(seg.elev_gain_m.iloc[0])
+
+
+def test_hvac_survives_a_missing_channel():
+    """NaN + number = NaN would silently void the whole auxiliary-load feature.
+    Both channels are 100% available for the BEVs, so this only bites on other
+    powertrains: for PHEVs the heater channel is present in only 12% of rows.
+    """
+    t = fake_trip(ac=800.0)
+    t["Heater Power[Watts]"] = np.nan          # channel absent entirely
+    seg, _ = build_segment_table(t)
+    assert len(seg) == 1
+    assert seg.aux_power_w.iloc[0] == pytest.approx(800.0)
+    assert seg.hvac_coverage.iloc[0] == 1.0    # A/C was still observed
+
+
+def test_hvac_coverage_flags_an_unmeasured_segment():
+    t = fake_trip()
+    t["Heater Power[Watts]"] = np.nan
+    t["Air Conditioning Power[Watts]"] = np.nan
+    seg, _ = build_segment_table(t)
+    assert seg.aux_power_w.iloc[0] == 0.0      # treated as no draw ...
+    assert seg.hvac_coverage.iloc[0] == 0.0    # ... but flagged as not measured
+
+
+def test_electric_mode_filter_refuses_to_run_without_engine_rpm():
+    """Silently returning False would reject the entire fleet and report 100%
+    attrition as though the data were simply unusable. It must fail loudly."""
+    from src.data.ved import electric_mode_mask
+    with pytest.raises(KeyError, match="Engine RPM"):
+        electric_mode_mask(fake_trip())
+
+
+def test_electric_mode_filter_accepts_engine_off_and_rejects_engine_on():
+    from src.data.ved import electric_mode_mask
+    off = fake_trip(); off["Engine RPM[RPM]"] = 0.0
+    on = fake_trip(); on["Engine RPM[RPM]"] = 0.0
+    on.loc[on.index[10], "Engine RPM[RPM]"] = 1500.0
+    assert electric_mode_mask(off) is True
+    assert electric_mode_mask(on) is False
