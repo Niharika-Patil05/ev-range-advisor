@@ -1,0 +1,34 @@
+{
+  "experiment": "E5_soh_lobo",
+  "description": "SoH estimation on real NASA cells, leave-one-battery-out",
+  "timestamp_utc": "2026-09-21T04:13:40+00:00",
+  "git_revision": "d9dd416-dirty",
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "n_rows_per_seed": 5,
+  "provenance": "REAL",
+  "conclusion_type": "DEMONSTRATED",
+  "split_protocol": "leave-one-battery-out; each cell predicted by a model that never saw it",
+  "n": "2359 cycles, 26 cells",
+  "python": "3.14.4",
+  "numpy": "2.5.3",
+  "pandas": "3.0.6",
+  "config": {
+    "features": [
+      "cc_time_min",
+      "cv_time_min",
+      "v_window_min",
+      "ic_peak",
+      "ic_peak_v",
+      "temp_rise_c",
+      "temp_mean_c",
+      "charge_energy_wh"
+    ]
+  },
+  "data_files": {}
+}

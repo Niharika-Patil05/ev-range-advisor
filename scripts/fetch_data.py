@@ -47,6 +47,13 @@ DIRECT_DOWNLOADS: dict[str, list[tuple[str, str]]] = {
         ("eVED.zip",
          "https://bitbucket.org/datarepo/eved-dataset/raw/main/data/eVED.zip"),
     ],
+    # NASA PCoE battery ageing data. The original ti.arc.nasa.gov landing page no
+    # longer serves the file directly; the PHM datasets S3 bucket is the mirror the
+    # community uses and returns the same archive.
+    "nasa_pcoe": [
+        ("NASA_Battery_Data_Set.zip",
+         "https://phm-datasets.s3.amazonaws.com/NASA/5.+Battery+Data+Set.zip"),
+    ],
 }
 
 
@@ -133,6 +140,26 @@ def extract_eved() -> None:
     print(f"  extracted {len(csvs)} CSV file(s) to {out.relative_to(ROOT)}")
 
 
+def extract_nasa() -> None:
+    """Unpack the NASA battery archive (nested zips of MATLAB .mat files)."""
+    import zipfile
+
+    out = RAW / "nasa_pcoe"
+    with zipfile.ZipFile(out / "NASA_Battery_Data_Set.zip") as z:
+        z.extractall(path=out)
+    # The distribution nests further zips inside the top-level one.
+    for inner in sorted(out.rglob("*.zip")):
+        if inner.name == "NASA_Battery_Data_Set.zip":
+            continue
+        try:
+            with zipfile.ZipFile(inner) as z:
+                z.extractall(path=inner.parent)
+        except zipfile.BadZipFile:
+            print(f"  skipping unreadable archive {inner.name}")
+    mats = list(out.rglob("*.mat"))
+    print(f"  extracted {len(mats)} .mat file(s) to {out.relative_to(ROOT)}")
+
+
 def extract_ved() -> None:
     """Unpack the VED .7z archives into data/raw/ved/dynamic/."""
     import py7zr
@@ -172,7 +199,8 @@ def main() -> None:
     hashes = fetch(args.dataset, force=args.force)
     record_hashes(args.dataset, hashes)
     if args.extract:
-        {"ved": extract_ved, "eved": extract_eved}.get(args.dataset, lambda: None)()
+        {"ved": extract_ved, "eved": extract_eved,
+         "nasa_pcoe": extract_nasa}.get(args.dataset, lambda: None)()
     print("Done.")
 
 

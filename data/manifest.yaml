@@ -109,7 +109,7 @@ datasets:
     citation: >
       B. Saha and K. Goebel, "Battery Data Set," NASA Ames Prognostics Data
       Repository, NASA Ames Research Center, Moffett Field, CA.
-    sha256: PENDING_DOWNLOAD
+    sha256: "sha256sums: NASA_Battery_Data_Set.zip=82302a7db4fc1b34..."
     contents:
       cells: ~34 Li-ion 18650, 2 Ah nominal
       profiles: charge (CC-CV 1.5 A to 4.2 V), discharge, EIS
