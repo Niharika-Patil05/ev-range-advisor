@@ -3,7 +3,7 @@
 Every hypothesis in `docs/HYPOTHESES.md`, committed **before** any real data was
 downloaded (git `f7be340`, 20 Sep 2026), against what the experiments measured.
 
-**7 supported · 6 refuted · 1 partial · 1 untested.** The refutations are the more
+**8 supported · 6 refuted · 2 partial · 1 untested.** The refutations are the more
 informative half, and none of them was quietly reinterpreted.
 
 ## RQ1 — physics prior and distribution shift
@@ -41,7 +41,7 @@ informative half, and none of them was quietly reinterpreted.
 |---|---|---|---|
 | H4a | Measured aux power beats ambient temperature | **SUPPORTED, not significant** | +1.73 vs +1.59 pp, inside ± 0.43 / 0.75 |
 | H4b | Traffic proxy adds information beyond speed and stops | **REFUTED** | −0.02 ± 0.09 pp — observed speed already encodes it |
-| H4c | Headwind is a weak feature | **NOT TESTED** | Wind never wired into the feature table |
+| H4c | Headwind is a weak feature | **SUPPORTED** | +0.05 ± 0.18 pp — indistinguishable from zero, 30× smaller than onboard temperature |
 | H4d | Grade features weakly informative | **SUPPORTED** | +0.22 and +0.53 pp |
 
 ## The thread running through the refutations
@@ -65,3 +65,20 @@ decisively (15.99 % vs 26.73 %).
 
 E2's findings file is **annotated, not rewritten**, so the record of what E2 alone
 could support survives.
+
+
+## Addendum — H4c, tested after the fact
+
+Wind and rain were wired in and ablated (`reports/H4c_weather_features/`). Adding them
+makes both models marginally **worse** (+0.11 to +0.12 pp), and headwind contributes
++0.05 ± 0.18 pp individually.
+
+The reason sharpens a theme running through the whole project. Reanalysis is a ~9 km
+grid average, so every segment in an hour gets identical wind, and reanalysis
+temperature agrees with VED's onboard sensor at only r = 0.882, RMSE 5.60 °C. **The
+one weather variable that matters is available onboard at far higher fidelity; the
+ones available only externally carry no measurable signal.**
+
+Together with the auxiliary-power finding — that measuring HVAC dissolves the
+cold-weather robustness problem — the practical conclusion is the same from both
+directions: **instrument the vehicle rather than joining an external dataset.**
